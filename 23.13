@@ -1,0 +1,10 @@
+import streamlit as st
+import folium
+from streamlit_folium import st_folium
+
+st.title("GTS Management Dashboard")
+m = folium.Map(location=[10.762622, 106.660172], zoom_start=12)
+
+folium.Marker([10.76, 106.66], popup="Kho chính").add_to(m)
+
+st_folium(m, width=700)
