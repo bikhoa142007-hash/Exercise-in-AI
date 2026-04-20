@@ -1,0 +1,13 @@
+import osmnx as ox
+import networkx as nx
+
+G = ox.graph_from_place("District 1, Ho Chi Minh City", network_type="drive")
+
+# 1. Chọn 2 điểm bất kỳ (tọa độ Lat, Lon)
+origin_node = ox.distance.nearest_nodes(G, 106.700, 10.776) # Gần chợ Bến Thành
+destination_node = ox.distance.nearest_nodes(G, 106.707, 10.785) # Gần Nhà thờ Đức Bà
+
+# 2. Chạy thuật toán Dijkstra và A*
+path_dijkstra = nx.shortest_path(G, origin_node, destination_node, weight='length', method='dijkstra')
+path_astar = nx.astar_path(G, origin_node, destination_node, weight='length')
+ox.plot_graph_route(G, path_astar, route_color="r", route_linewidth=4)
