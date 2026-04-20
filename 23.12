@@ -1,0 +1,20 @@
+import numpy as np
+
+locations = np.array([[10, 10], [20, 50], [80, 20], [40, 30]]) 
+
+def distance(p1, p2):
+    return np.linalg.norm(p1 - p2)
+
+def nearest_neighbor(points):
+    start = 0
+    path = [start]
+    unvisited = list(range(1, len(points)))
+    
+    while unvisited:
+        last = path[-1]
+        next_pt = min(unvisited, key=lambda x: distance(points[last], points[x]))
+        path.append(next_pt)
+        unvisited.remove(next_pt)
+    return path
+
+print("Thứ tự giao hàng tối ưu:", nearest_neighbor(locations))
