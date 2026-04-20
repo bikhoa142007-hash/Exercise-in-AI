@@ -1,0 +1,39 @@
+import folium
+from geopy.geocoders import Nominatim
+from geopy.distance import geodesic
+geolocator = Nominatim(user_agent="my_assignment_ueh")
+center_coords = (10.7828, 106.6959) 
+addresses = [
+    "279 Nguyễn Tri Phương, Quận 10, Hồ Chí Minh", 
+    "91 Ba Tháng Hai, Quận 10, Hồ Chí Minh",
+    "1 Đào Duy Từ, Quận 10, Hồ Chí Minh",
+    "17 Phạm Ngọc Thạch, Quận 3, Hồ Chí Minh",
+    "232 Võ Thị Sáu, Quận 3, Hồ Chí Minh",
+    "135 Hai Bà Trưng, Quận 1, Hồ Chí Minh",
+    "Dinh Độc Lập, Quận 1, Hồ Chí Minh",
+    "Nhà thờ Đức Bà, Quận 1, Hồ Chí Minh",
+    "Chợ Bến Thành, Quận 1, Hồ Chí Minh",
+    "Bưu điện Thành phố, Hồ Chí Minh"
+]
+m = folium.Map(location=center_coords, zoom_start=14)
+folium.Marker(center_coords, popup="Điểm Trung Tâm (UEH A)", icon=folium.Icon(color='red')).add_to(m)
+print(f"{'Địa chỉ':<40} | {'Khoảng cách (km)':<15}")
+print("-" * 60)
+for addr in addresses:
+    try:
+        location = geolocator.geocode(addr)
+        if location:
+            point_coords = (location.latitude, location.longitude)
+            
+            dist = geodesic(center_coords, point_coords).km
+            
+            print(f"{addr[:38]:<40} | {dist:.2f} km")
+            
+            folium.Marker(point_coords, popup=f"{addr}: {dist:.2f}km").add_to(m)
+            folium.PolyLine([center_coords, point_coords], color="blue", weight=2, opacity=0.6).add_to(m)
+    except Exception as e:
+        print(f"Lỗi khi xử lý {addr}: {e}")
+
+m.save("ket_qua_bai_23.html")
+print("-" * 60)
+print("Xong! Bạn hãy mở file 'ket_qua_bai_23.html' trong thư mục code để xem bản đồ.")
