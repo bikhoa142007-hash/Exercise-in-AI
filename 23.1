@@ -1,0 +1,33 @@
+import folium
+m = folium.Map(location=[10.7610532, 106.668358], zoom_start=16)
+folium.Marker(
+    location=[10.7610532, 106.668358],
+    popup="UEH Cơ sở B",
+    icon=folium.Icon(color="blue", icon="info-sign")
+).add_to(m)
+folium.Marker(
+    location=[10.757827, 106.659553],
+    popup="Bệnh viện Chợ Rẫy",
+    icon=folium.Icon(color="red", icon="plus")
+).add_to(m)
+folium.Marker(
+    location=[10.760243, 106.666324],
+    popup="WinMart+ Đào Duy Từ",
+    icon=folium.Icon(color="green", icon="shopping-cart")
+).add_to(m)
+folium.Marker(
+    location=[10.762345, 106.670123],
+    popup="Công viên Lê Văn Tám",
+    icon=folium.Icon(color="purple", icon="tree-conifer")
+).add_to(m)
+folium.Marker(
+    location=[10.758456, 106.667890],
+    popup="Trường THPT Nguyễn Thượng Hiền",
+    icon=folium.Icon(color="orange", icon="education")
+).add_to(m)
+folium.Marker(
+    location=[10.761400, 106.661600],
+    popup="Sân vận động Thống Nhất",
+    icon=folium.Icon(color="orange", icon="star")
+).add_to(m)
+m.save("ban_do_ueh")
