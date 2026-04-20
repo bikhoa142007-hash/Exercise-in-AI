@@ -1,0 +1,48 @@
+import folium
+import numpy as np
+from scipy.spatial import distance
+
+center_lat, center_lon = 10.776, 106.700
+np.random.seed(42)
+riders_coords = np.random.normal([center_lat, center_lon], 0.01, size=(3, 2))
+drivers_coords = np.random.normal([center_lat, center_lon], 0.01, size=(5, 2))
+m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
+available_drivers = list(range(len(drivers_coords)))
+assignments = []
+
+for r_idx, r_pos in enumerate(riders_coords):
+    dist_matrix = [distance.euclidean(r_pos, drivers_coords[d_idx]) for d_idx in available_drivers]
+    
+    best_match_idx_in_list = np.argmin(dist_matrix)
+    actual_driver_idx = available_drivers[best_match_idx_in_list]
+    
+    assignments.append((r_idx, actual_driver_idx))
+    available_drivers.pop(best_match_idx_in_list)
+
+for d_idx, d_pos in enumerate(drivers_coords):
+    folium.Marker(
+        location=d_pos,
+        popup=f"Tài xế {d_idx}",
+        icon=folium.Icon(color='red', icon='car', prefix='fa')
+    ).add_to(m)
+for r_idx, r_pos in enumerate(riders_coords):
+    folium.Marker(
+        location=r_pos,
+        popup=f"Khách hàng {r_idx}",
+        icon=folium.Icon(color='blue', icon='user', prefix='fa')
+    ).add_to(m)
+for r_idx, d_idx in assignments:
+    r_pos = riders_coords[r_idx]
+    d_pos = drivers_coords[d_idx]
+    
+    folium.PolyLine(
+        locations=[r_pos, d_pos],
+        color='green',
+        weight=5,
+        opacity=0.8,
+        dash_array='10',
+        tooltip=f"Ghép: Khách {r_idx} - Xe {d_idx}"
+    ).add_to(m)
+
+m.save('mo_phong_goi_xe.html')
+print("Đã tạo file 'mo_phong_goi_xe.html'. Hãy mở bằng trình duyệt.")
