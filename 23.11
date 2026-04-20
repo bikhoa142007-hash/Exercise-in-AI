@@ -1,0 +1,17 @@
+import pandas as pd
+from sklearn.ensemble import RandomForestRegressor
+
+data = pd.DataFrame({
+    'hour': [8, 9, 10, 17, 18, 19] * 10,
+    'area_id': [1, 1, 1, 2, 2, 2] * 10,
+    'demand': [50, 60, 45, 100, 120, 110] * 10
+})
+
+X = data[['hour', 'area_id']]
+y = data['demand']
+
+model = RandomForestRegressor(n_estimators=100)
+model.fit(X, y)
+
+prediction = model.predict([[18, 2]])
+print(f"Nhu cầu dự báo: {prediction[0]} đơn hàng")
