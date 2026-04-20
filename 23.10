@@ -1,0 +1,21 @@
+import numpy as np
+import skfuzzy as fuzzy
+from skfuzzy import control as ctrl
+
+velocity = ctrl.Antecedent(np.arange(0, 81, 1), 'velocity') # Vận tốc 0-80km/h
+density = ctrl.Antecedent(np.arange(0, 101, 1), 'density')  # Mật độ 0-100%
+risk = ctrl.Consequent(np.arange(0, 101, 1), 'risk')
+
+velocity['slow'] = fuzzy.trimf(velocity.universe, [0, 0, 40])
+density['high'] = fuzzy.trimf(density.universe, [60, 100, 100])
+risk['high'] = fuzzy.trimf(risk.universe, [70, 100, 100])
+
+rule1 = ctrl.Rule(velocity['slow'] & density['high'], risk['high'])
+
+risk_ctrl = ctrl.ControlSystem([rule1])
+simulation = ctrl.ControlSystemSimulation(risk_ctrl)
+
+simulation.input['velocity'] = 15
+simulation.input['density'] = 85
+simulation.compute()
+print(f"Nguy cơ tắc nghẽn: {simulation.output['risk']}%")
