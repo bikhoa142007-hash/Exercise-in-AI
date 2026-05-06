@@ -1,0 +1,210 @@
+import pygame
+import tkinter as tk
+from tkinter import messagebox
+from PIL import Image, ImageTk
+import serial
+import threading
+import json
+import os
+import sys
+
+# --- PHẦN 1: HIỆU ỨNG INTRO BẰNG PYGAME ---
+def run_pygame_intro():
+    pygame.init()
+    WIDTH, HEIGHT = 1232, 684
+    screen = pygame.display.set_mode((WIDTH, HEIGHT), pygame.NOFRAME) # Không viền để trông như splash screen
+    clock = pygame.time.Clock()
+
+    try:
+        original_img = pygame.image.load("IT_BLIND_CLUB.png").convert_alpha()
+    except:
+        return # Nếu không có ảnh thì bỏ qua intro
+
+    scale_factor = 0.4  # Bắt đầu từ 40% kích thước
+    running = True
+
+    while running:
+        screen.fill((240, 237, 229)) # Màu nền tảng của ảnh
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+
+        if scale_factor < 1.0:
+            scale_factor += 0.015 # Tốc độ phóng ảnh
+        else:
+            pygame.time.wait(500) # Dừng lại nửa giây khi đạt 100%
+            running = False
+
+        new_w = int(WIDTH * scale_factor)
+        new_h = int(HEIGHT * scale_factor)
+        
+        # Scale mịn và căn giữa màn hình
+        scaled_img = pygame.transform.smoothscale(original_img, (new_w, new_h))
+        rect = scaled_img.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+
+        screen.blit(scaled_img, rect)
+        pygame.display.flip()
+        clock.tick(60)
+
+    pygame.quit()
+
+# --- PHẦN 2: GIAO DIỆN CHÍNH BẰNG TKINTER ---
+class ITBlindClubApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("IT Blind Club - Hệ Thống Phân Loại")
+        self.root.geometry("1232x684")
+        self.root.resizable(False, False)
+
+        self.db_file = "users_data.json"
+        self.users = self.load_data()
+        self.arduino = None
+        self.running = False
+        self.bg_color_hex = "#f0ede5" 
+
+        self.show_login_screen()
+
+    def load_data(self):
+        if not os.path.exists(self.db_file):
+            return {"admin": "1234"}
+        try:
+            with open(self.db_file, "r") as f:
+                return json.load(f)
+        except: return {"admin": "1234"}
+
+    def save_data(self):
+        with open(self.db_file, "w") as f:
+            json.dump(self.users, f, indent=4)
+
+    def clear_screen(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+    def show_login_screen(self):
+        self.clear_screen()
+        try:
+            bg_img = Image.open("IT_BLIND_CLUB.png")
+            bg_img = bg_img.resize((1232, 684), Image.Resampling.LANCZOS)
+            self.bg_photo = ImageTk.PhotoImage(bg_img)
+            tk.Label(self.root, image=self.bg_photo).place(x=0, y=0, relwidth=1, relheight=1)
+        except:
+            self.root.configure(bg=self.bg_color_hex)
+
+        # Căn chỉnh input tại rely=0.85 theo yêu cầu
+        input_frame = tk.Frame(self.root, bg=self.bg_color_hex)
+        input_frame.place(relx=0.5, rely=0.85, anchor="n") 
+
+        tk.Label(input_frame, text="User:", font=("Arial", 10, "bold"), bg=self.bg_color_hex).grid(row=0, column=0, padx=5)
+        self.ent_user = tk.Entry(input_frame, font=("Arial", 10), width=15)
+        self.ent_user.grid(row=0, column=1, padx=5)
+
+        tk.Label(input_frame, text="Pass:", font=("Arial", 10, "bold"), bg=self.bg_color_hex).grid(row=0, column=2, padx=5)
+        self.ent_pass = tk.Entry(input_frame, font=("Arial", 10), width=15, show="*")
+        self.ent_pass.grid(row=0, column=3, padx=5)
+
+        btn_frame = tk.Frame(self.root, bg=self.bg_color_hex)
+        btn_frame.place(relx=0.5, rely=0.92, anchor="n")
+
+        tk.Button(btn_frame, text="ĐĂNG NHẬP", font=("Arial", 9, "bold"), bg="#2c3e50", fg="white", command=self.handle_login).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="ĐĂNG KÝ", font=("Arial", 9, "bold"), bg="#27ae60", fg="white", command=self.handle_register).pack(side="left", padx=5)
+        tk.Button(btn_frame, text="QUÊN MK", font=("Arial", 9, "bold"), bg="#e74c3c", fg="white", command=self.handle_forgot_pw).pack(side="left", padx=5)
+
+    def handle_login(self):
+        u, p = self.ent_user.get(), self.ent_pass.get()
+        if u in self.users and self.users[u] == p:
+            self.show_monitor_screen()
+        else:
+            messagebox.showerror("Lỗi", "Sai tài khoản hoặc mật khẩu!")
+
+    def handle_register(self):
+        u, p = self.ent_user.get(), self.ent_pass.get()
+        if not u or not p:
+            messagebox.showwarning("Chú ý", "Không được để trống!")
+            return
+        if u in self.users:
+            messagebox.showerror("Lỗi", "Tài khoản đã tồn tại!")
+        else:
+            self.users[u] = p
+            self.save_data()
+            messagebox.showinfo("Thành công", f"Đã đăng ký tài khoản: {u}")
+
+    def handle_forgot_pw(self):
+        u = self.ent_user.get()
+        if u in self.users:
+            messagebox.showinfo("Mật khẩu", f"Mật khẩu của '{u}' là: {self.users[u]}")
+        else:
+            messagebox.showerror("Lỗi", "Không tìm thấy tài khoản!")
+
+    def show_monitor_screen(self):
+        self.clear_screen()
+        self.root.configure(bg='#ffffff')
+
+        header = tk.Frame(self.root, bg='#2c3e50', height=60)
+        header.pack(fill='x')
+        tk.Label(header, text="GIÁM SÁT HỆ THỐNG PHÂN LOẠI", font=("Arial", 16, "bold"), bg='#2c3e50', fg='white').pack(pady=15)
+
+        container = tk.Frame(self.root, bg='#ffffff')
+        container.pack(expand=True)
+
+        self.counters = {}
+        configs = [("ĐỎ", "red", "#e74c3c"), ("XANH DƯƠNG", "blue", "#3498db"), ("XANH LÁ CÂY", "green", "#2ecc71")]
+
+        for name, key, color in configs:
+            box = tk.Frame(container, bg='white', width=220, height=250, bd=1, relief="solid")
+            box.pack(side='left', padx=40)
+            box.pack_propagate(False)
+            tk.Label(box, text=name, font=("Arial", 14, "bold"), fg=color, bg='white').pack(pady=20)
+            lbl = tk.Label(box, text="0", font=("Arial", 45, "bold"), bg='white')
+            lbl.pack(expand=True)
+            self.counters[key] = lbl
+
+        monitor_frame = tk.Frame(self.root, bg='#f0f0f0')
+        monitor_frame.pack(fill='x', side='bottom')
+
+        self.log_text = tk.Text(monitor_frame, height=5, font=("Consolas", 10))
+        self.log_text.pack(fill='x', padx=10, pady=5)
+
+        self.btn_serial = tk.Button(monitor_frame, text="KẾT NỐI ARDUINO", command=self.toggle_serial, bg="#2c3e50", fg="white")
+        self.btn_serial.pack(pady=5)
+
+    def toggle_serial(self):
+        if not self.running:
+            try:
+                self.arduino = serial.Serial('COM3', 9600, timeout=1)
+                self.running = True
+                self.btn_serial.config(text="NGẮT KẾT NỐI", bg="#e67e22")
+                threading.Thread(target=self.listen_arduino, daemon=True).start()
+            except:
+                messagebox.showerror("Lỗi", "Không tìm thấy Arduino trên cổng COM3!")
+        else:
+            self.running = False
+            if self.arduino: self.arduino.close()
+            self.btn_serial.config(text="KẾT NỐI ARDUINO", bg="#2c3e50")
+
+    def listen_arduino(self):
+        while self.running:
+            if self.arduino and self.arduino.in_waiting > 0:
+                try:
+                    line = self.arduino.readline().decode('utf-8').strip().upper()
+                    self.log_text.insert(tk.END, f"> {line}\n")
+                    self.log_text.see(tk.END)
+                    if "RED" in line: self.update_count("red")
+                    if "BLUE" in line: self.update_count("blue")
+                    if "GREEN" in line: self.update_count("green")
+                except: pass
+
+    def update_count(self, key):
+        val = int(self.counters[key]['text'])
+        self.counters[key].config(text=str(val + 1))
+
+# --- PHẦN 3: ĐIỀU KHIỂN CHƯƠNG TRÌNH ---
+if __name__ == "__main__":
+    # 1. Chạy intro Pygame trước
+    run_pygame_intro()
+    
+    # 2. Sau khi Pygame kết thúc, mở Tkinter
+    root = tk.Tk()
+    app = ITBlindClubApp(root)
+    root.mainloop()
