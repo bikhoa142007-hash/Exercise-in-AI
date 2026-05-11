@@ -1,832 +1,204 @@
 import tkinter as tk
-from tkinter import ttk, filedialog, messagebox
-import pandas as pd
+from tkinter import ttk, messagebox
+import webbrowser
+import os
 import numpy as np
-import skfuzzy as fuzz
-from skfuzzy import control as ctrl
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
-import matplotlib
-matplotlib.use('TkAgg')
 
+class LinearRegressionModel:
+    def __init__(self):
+        self.intercept = 0.5
+        self.coef_dien_tich = 0.08
+        self.coef_kc_truong = -0.05
+        self.coef_so_nguoi = 0.15
+        
+        self.coef_phuong = {
+            "Linh Trung (Thủ Đức)": 0.0,
+            "Linh Chiểu (Thủ Đức)": 0.1,
+            "Hiệp Bình Chánh (Thủ Đức)": -0.1,
+            "Tam Bình (Thủ Đức)": 0.05,
+            "Bình Thọ (Thủ Đức)": 0.2,
+            "Phường 14 (Bình Thạnh)": 0.3,
+            "Phường 25 (Bình Thạnh)": 0.25,
+            "Phường 12 (Gò Vấp)": 0.15,
+            "Phường 9 (Phú Nhuận)": 0.4,
+        }
+        
+        self.coef_tien_ich = {
+            "may_lanh": 0.35,
+            "wc_rieng": 0.25,
+            "co_bep": 0.15,
+            "gio_giac": 0.10,
+            "cho_de_xe": 0.10,
+            "gan_tien_ich": 0.20,
+        }
 
-# ─────────────────────────────────────────────
-#  MÀU SẮC & FONT
-# ─────────────────────────────────────────────
-COLORS = {
-    "bg":           "#F7F8FA",
-    "surface":      "#FFFFFF",
-    "surface2":     "#F1F3F5",
-    "accent":       "#1D9E75",
-    "accent_light": "#E1F5EE",
-    "accent_dark":  "#085041",
-    "warn":         "#BA7517",
-    "warn_light":   "#FAEEDA",
-    "danger":       "#A32D2D",
-    "danger_light": "#FCEBEB",
-    "text":         "#1A1A1A",
-    "text_muted":   "#6B7280",
-    "border":       "#E5E7EB",
-    "tab_active":   "#1D9E75",
-    "tab_bg":       "#FFFFFF",
-    "header_bg":    "#085041",
-    "header_fg":    "#FFFFFF",
-}
+    def predict(self, dien_tich, kc_truong, so_nguoi, phuong, tien_ich_dict):
+        gia = self.intercept
+        gia += self.coef_dien_tich * dien_tich
+        gia += self.coef_kc_truong * kc_truong
+        gia += self.coef_so_nguoi * so_nguoi
+        gia += self.coef_phuong.get(phuong, 0.0)
 
-FONT_TITLE  = ("Segoe UI", 13, "bold")
-FONT_HEAD   = ("Segoe UI", 11, "bold")
-FONT_BODY   = ("Segoe UI", 10)
-FONT_SMALL  = ("Segoe UI", 9)
-FONT_LARGE  = ("Segoe UI", 16, "bold")
+        for ten, co_hay_khong in tien_ich_dict.items():
+            if co_hay_khong:
+                gia += self.coef_tien_ich.get(ten, 0)
 
+        return max(0.5, round(gia, 2))
 
-# ─────────────────────────────────────────────
-#  XÂY DỰNG HỆ THỐNG FUZZY
-# ─────────────────────────────────────────────
-def build_fuzzy_system():
-    distance     = ctrl.Antecedent(np.arange(0, 21, 0.5), 'distance')
-    area         = ctrl.Antecedent(np.arange(0, 81, 1),   'area')
-    hour_free    = ctrl.Antecedent(np.arange(0, 25, 1),   'hour_free')
-    people_max   = ctrl.Antecedent(np.arange(0, 7,  1),   'people_max')
-    parking      = ctrl.Antecedent(np.arange(0, 101, 1),  'parking')
-    air_condition= ctrl.Antecedent(np.arange(0, 101, 1),  'air_condition')
-    WC_private   = ctrl.Antecedent(np.arange(0, 101, 1),  'WC_private')
-    kitchen      = ctrl.Antecedent(np.arange(0, 101, 1),  'kitchen')
-    bus          = ctrl.Antecedent(np.arange(0, 101, 1),  'bus')
-    supermarket  = ctrl.Antecedent(np.arange(0, 101, 1),  'supermarket')
-    price        = ctrl.Consequent(np.arange(0, 101, 1),  'price')
+class AppDuDoanGiaPhongTro:
+    MAU_NEN = "#F0F4F8"
+    MAU_HEADER = "#1A237E"
+    MAU_FRAME = "#FFFFFF"
+    MAU_NUT_DU_DOAN = "#1565C0"
+    MAU_NUT_BAN_DO = "#2E7D32"
+    MAU_KET_QUA = "#2E7D32"
+    MAU_NHAN = "#37474F"
+    MAU_VIEN = "#CFD8DC"
 
-    # Membership functions – khoảng cách
-    distance['close']  = fuzz.trimf(distance.universe, [0, 0, 5])
-    distance['medium'] = fuzz.trimf(distance.universe, [0, 5, 10])
-    distance['far']    = fuzz.trimf(distance.universe, [5, 10, 20])
+    FONT_TIEU_DE = ("Segoe UI", 18, "bold")
+    FONT_PHAN = ("Segoe UI", 11, "bold")
+    FONT_NHAN = ("Segoe UI", 10)
+    FONT_ENTRY = ("Segoe UI", 10)
+    FONT_NUT = ("Segoe UI", 11, "bold")
+    FONT_KET_QUA = ("Segoe UI", 14, "bold")
 
-    # Diện tích
-    area['small']  = fuzz.trimf(area.universe, [0,  0,  40])
-    area['medium'] = fuzz.trimf(area.universe, [30, 40, 60])
-    area['large']  = fuzz.trimf(area.universe, [50, 60, 80])
-
-    # Giờ tự do
-    hour_free['limited'] = fuzz.trimf(hour_free.universe, [0, 0, 5])
-    hour_free['plenty']  = fuzz.trimf(hour_free.universe, [5, 10, 24])
-
-    # Số người
-    people_max['few']  = fuzz.trimf(people_max.universe, [0, 0, 3])
-    people_max['many'] = fuzz.trimf(people_max.universe, [3, 4, 6])
-
-    # Các biến nhị phân (0=có, 100=không)
-    for var in [parking, air_condition, WC_private, kitchen, bus, supermarket]:
-        var['yes'] = fuzz.trimf(var.universe, [0,   0,   50])
-        var['no']  = fuzz.trimf(var.universe, [50, 100, 100])
-
-    # Giá
-    price['low']    = fuzz.trimf(price.universe, [0,  0,  50])
-    price['medium'] = fuzz.trimf(price.universe, [30, 50, 70])
-    price['high']   = fuzz.trimf(price.universe, [50, 70, 100])
-
-    rules = [
-        # HIGH
-        ctrl.Rule(distance['close']  & area['large'],                          price['high']),
-        ctrl.Rule(distance['close']  & area['medium'],                         price['high']),
-        ctrl.Rule(air_condition['yes'] & WC_private['yes'],                    price['high']),
-        ctrl.Rule(kitchen['yes']     & area['large'],                          price['high']),
-        ctrl.Rule(supermarket['yes'] & distance['close'],                      price['high']),
-        ctrl.Rule(people_max['many'] & area['large'],                          price['high']),
-        ctrl.Rule(hour_free['plenty']& parking['yes'],                         price['high']),
-        ctrl.Rule(air_condition['yes'] & kitchen['yes'] & WC_private['yes'],   price['high']),
-        ctrl.Rule(parking['yes']     & bus['yes'] & supermarket['yes'],        price['high']),
-        ctrl.Rule(distance['close']  & air_condition['yes'],                   price['high']),
-        # MEDIUM
-        ctrl.Rule(distance['medium'] & area['medium'],                         price['medium']),
-        ctrl.Rule(distance['far']    & area['large'],                          price['medium']),
-        ctrl.Rule(kitchen['no']      & WC_private['yes'],                      price['medium']),
-        ctrl.Rule(air_condition['yes'] & distance['far'],                      price['medium']),
-        ctrl.Rule(bus['yes']         & distance['far'],                        price['medium']),
-        ctrl.Rule(parking['yes']     & area['small'],                          price['medium']),
-        ctrl.Rule(parking['no']      & distance['close'],                      price['medium']),
-        ctrl.Rule(people_max['many'] & WC_private['no'],                       price['medium']),
-        ctrl.Rule(distance['medium'] & WC_private['yes'],                      price['medium']),
-        ctrl.Rule(area['medium']     & parking['yes'],                         price['medium']),
-        ctrl.Rule(distance['close']  & area['small'] & air_condition['no'],    price['medium']),
-        ctrl.Rule(distance['far']    & area['large'] & kitchen['yes'],         price['medium']),
-        ctrl.Rule(supermarket['yes'] & air_condition['no'],                    price['medium']),
-        ctrl.Rule(people_max['many'] & parking['no'],                          price['medium']),
-        ctrl.Rule(hour_free['plenty']& distance['far'],                        price['medium']),
-        ctrl.Rule(area['large']      & air_condition['no'],                    price['medium']),
-        ctrl.Rule(distance['close']  & parking['no'],                          price['medium']),
-        ctrl.Rule(kitchen['yes']     & WC_private['no'],                       price['medium']),
-        ctrl.Rule(bus['yes']         & people_max['few'],                      price['medium']),
-        ctrl.Rule(distance['medium'] & area['small'] & air_condition['yes'],   price['medium']),
-        # LOW
-        ctrl.Rule(distance['far']    & area['small'],                          price['low']),
-        ctrl.Rule(air_condition['no']& WC_private['no'],                       price['low']),
-        ctrl.Rule(bus['no']          & supermarket['no'],                      price['low']),
-        ctrl.Rule(people_max['few']  & area['small'],                          price['low']),
-        ctrl.Rule(hour_free['limited'],                                        price['low']),
-        ctrl.Rule(distance['far']    & air_condition['no'],                    price['low']),
-        ctrl.Rule(area['small']      & kitchen['no'],                          price['low']),
-        ctrl.Rule(WC_private['no']   & parking['no'],                          price['low']),
-        ctrl.Rule(distance['far']    & bus['no'],                              price['low']),
-        ctrl.Rule(hour_free['limited'] & area['small'],                        price['low']),
+    DANH_SACH_PHUONG = [
+        "Linh Trung (Thủ Đức)", "Linh Chiểu (Thủ Đức)", "Hiệp Bình Chánh (Thủ Đức)",
+        "Tam Bình (Thủ Đức)", "Bình Thọ (Thủ Đức)", "Phường 14 (Bình Thạnh)",
+        "Phường 25 (Bình Thạnh)", "Phường 12 (Gò Vấp)", "Phường 9 (Phú Nhuận)",
     ]
 
-    price_ctrl = ctrl.ControlSystem(rules)
-    sim = ctrl.ControlSystemSimulation(price_ctrl)
-    return sim
-
-
-def score_to_price(score):
-    """Chuyển điểm fuzzy 0-100 → giá VNĐ/tháng."""
-    price_min = 800_000
-    price_max = 7_000_000
-    price = price_min + (score / 100) * (price_max - price_min)
-    return round(price / 50_000) * 50_000
-
-
-def bool_to_fuzzy(val: bool) -> int:
-    """True → 0 (yes), False → 100 (no)."""
-    return 0 if val else 100
-
-
-def format_price(price: float) -> str:
-    if price >= 1_000_000:
-        return f"{price/1_000_000:.1f} triệu/tháng"
-    return f"{int(price/1000)}k/tháng"
-
-
-# ─────────────────────────────────────────────
-#  WIDGET TIỆN ÍCH
-# ─────────────────────────────────────────────
-class LabeledSlider(tk.Frame):
-    """Slider kèm nhãn và giá trị hiển thị."""
-    def __init__(self, parent, label, from_, to, resolution=1,
-                 unit="", fmt=None, **kw):
-        super().__init__(parent, bg=COLORS["surface"], **kw)
-        self.fmt = fmt or (lambda v: f"{v:.0f}{unit}")
-        tk.Label(self, text=label, font=FONT_SMALL,
-                 bg=COLORS["surface"], fg=COLORS["text_muted"]).pack(anchor="w")
-        row = tk.Frame(self, bg=COLORS["surface"])
-        row.pack(fill="x")
-        self.var = tk.DoubleVar()
-        self.lbl = tk.Label(row, font=("Segoe UI", 10, "bold"),
-                            bg=COLORS["surface"], fg=COLORS["accent"],
-                            width=10, anchor="e")
-        self.lbl.pack(side="right", padx=(6, 0))
-        self.slider = tk.Scale(
-            row, variable=self.var, from_=from_, to=to,
-            resolution=resolution, orient="horizontal",
-            showvalue=False, bg=COLORS["surface"],
-            troughcolor=COLORS["accent_light"], activebackground=COLORS["accent"],
-            highlightthickness=0, bd=0,
-            command=self._on_change
-        )
-        self.slider.pack(side="left", fill="x", expand=True)
-        self.var.set((from_ + to) / 2)
-        self._on_change(self.var.get())
-
-    def _on_change(self, v):
-        self.lbl.config(text=self.fmt(float(v)))
-
-    def get(self):
-        return self.var.get()
-
-
-class ToggleButton(tk.Frame):
-    """Nút bật/tắt (Có / Không)."""
-    def __init__(self, parent, label, **kw):
-        super().__init__(parent, bg=COLORS["surface"], **kw)
-        self.value = tk.BooleanVar(value=True)
-        tk.Label(self, text=label, font=FONT_SMALL,
-                 bg=COLORS["surface"], fg=COLORS["text_muted"]).pack(anchor="w")
-        row = tk.Frame(self, bg=COLORS["surface"])
-        row.pack(fill="x")
-        self.btn_yes = tk.Button(row, text="✓  Có", font=FONT_SMALL,
-                                 command=lambda: self._set(True), width=7,
-                                 relief="flat", bd=0, cursor="hand2")
-        self.btn_no  = tk.Button(row, text="✗  Không", font=FONT_SMALL,
-                                 command=lambda: self._set(False), width=9,
-                                 relief="flat", bd=0, cursor="hand2")
-        self.btn_yes.pack(side="left", padx=(0, 4))
-        self.btn_no.pack(side="left")
-        self._set(True)
-
-    def _set(self, val: bool):
-        self.value.set(val)
-        if val:
-            self.btn_yes.config(bg=COLORS["accent"], fg="white")
-            self.btn_no.config(bg=COLORS["surface2"], fg=COLORS["text_muted"])
-        else:
-            self.btn_yes.config(bg=COLORS["surface2"], fg=COLORS["text_muted"])
-            self.btn_no.config(bg=COLORS["danger"], fg="white")
-
-    def get(self) -> bool:
-        return self.value.get()
-
-
-# ─────────────────────────────────────────────
-#  CỬA SỔ CHÍNH
-# ─────────────────────────────────────────────
-class RentAIApp:
-    def __init__(self, root: tk.Tk):
+    def __init__(self, root):
         self.root = root
-        self.root.title("Dự Đoán Giá Thuê Phòng Trọ Sinh Viên")
-        self.root.geometry("920x720")
-        self.root.minsize(800, 620)
-        self.root.configure(bg=COLORS["bg"])
+        self.mo_hinh = LinearRegressionModel()
+        self._cai_dat_cua_so()
+        self._tao_giao_dien()
 
-        self.price_sim = build_fuzzy_system()
-        self.history: list[dict] = []
+    def _cai_dat_cua_so(self):
+        self.root.title("🏠 Dự Đoán Giá Phòng Trọ Sinh Viên")
+        self.root.geometry("680x750")
+        self.root.resizable(False, False)
+        self.root.configure(bg=self.MAU_NEN)
+        self.root.eval('tk::PlaceWindow . center')
 
-        self._build_header()
-        self._build_notebook()
+    def _tao_giao_dien(self):
+        frame_tieu_de = tk.Frame(self.root, bg=self.MAU_HEADER, pady=18)
+        frame_tieu_de.pack(fill="x")
 
-    # ── HEADER ──────────────────────────────
-    def _build_header(self):
-        hdr = tk.Frame(self.root, bg=COLORS["header_bg"], height=56)
-        hdr.pack(fill="x")
-        hdr.pack_propagate(False)
-        tk.Label(hdr, text="🏠  Dự Đoán Giá Thuê Phòng Trọ Sinh Viên",
-                 font=("Segoe UI", 13, "bold"),
-                 bg=COLORS["header_bg"], fg=COLORS["header_fg"]).pack(
-                 side="left", padx=20, pady=14)
-        tk.Label(hdr, text="Fuzzy Logic · HCMC",
-                 font=FONT_SMALL, bg=COLORS["header_bg"],
-                 fg="#9FE1CB").pack(side="right", padx=20)
+        tk.Label(frame_tieu_de, text="🏠 Dự Đoán Giá Phòng Trọ Sinh Viên", font=self.FONT_TIEU_DE, bg=self.MAU_HEADER, fg="white").pack()
+        tk.Label(frame_tieu_de, text="Nhập thông tin phòng trọ để nhận dự đoán giá thuê hàng tháng", font=("Segoe UI", 9), bg=self.MAU_HEADER, fg="#90CAF9").pack()
 
-    # ── NOTEBOOK (tabs) ──────────────────────
-    def _build_notebook(self):
-        style = ttk.Style()
-        style.theme_use("clam")
-        style.configure("Custom.TNotebook",
-                        background=COLORS["bg"],
-                        tabmargins=[8, 8, 0, 0])
-        style.configure("Custom.TNotebook.Tab",
-                        font=FONT_BODY,
-                        padding=[14, 8],
-                        background=COLORS["surface2"],
-                        foreground=COLORS["text_muted"])
-        style.map("Custom.TNotebook.Tab",
-                  background=[("selected", COLORS["surface"])],
-                  foreground=[("selected", COLORS["accent"])],
-                  expand=[("selected", [1, 1, 1, 0])])
+        frame_noi_dung = tk.Frame(self.root, bg=self.MAU_NEN, padx=24, pady=16)
+        frame_noi_dung.pack(fill="both", expand=True)
 
-        nb = ttk.Notebook(self.root, style="Custom.TNotebook")
-        nb.pack(fill="both", expand=True, padx=12, pady=12)
+        self._tao_khung_thong_tin_co_ban(frame_noi_dung)
+        self._tao_khung_tien_ich(frame_noi_dung)
+        self._tao_khung_nut(frame_noi_dung)
+        self._tao_khung_ket_qua(frame_noi_dung)
 
-        self.tab_form    = tk.Frame(nb, bg=COLORS["surface"])
-        self.tab_csv     = tk.Frame(nb, bg=COLORS["surface"])
-        self.tab_chart   = tk.Frame(nb, bg=COLORS["surface"])
-        self.tab_history = tk.Frame(nb, bg=COLORS["surface"])
+    def _tao_khung_thong_tin_co_ban(self, parent):
+        khung = self._tao_khung_vien(parent, "📋  Thông Tin Phòng Trọ")
+        khung.columnconfigure(0, weight=1)
+        khung.columnconfigure(2, weight=1)
 
-        nb.add(self.tab_form,    text="  🔢  Tính đơn lẻ  ")
-        nb.add(self.tab_csv,     text="  📂  Xử lý CSV  ")
-        nb.add(self.tab_chart,   text="  📊  Biểu đồ  ")
-        nb.add(self.tab_history, text="  📋  Lịch sử  ")
+        tk.Label(khung, text="Diện tích (m²):", **self._style_nhan()).grid(row=0, column=0, sticky="w", pady=6)
+        self.entry_dien_tich = ttk.Entry(khung, font=self.FONT_ENTRY, width=14)
+        self.entry_dien_tich.insert(0, "20")
+        self.entry_dien_tich.grid(row=0, column=1, sticky="w", padx=(6, 20), pady=6)
 
-        self._build_tab_form()
-        self._build_tab_csv()
-        self._build_tab_chart()
-        self._build_tab_history()
+        tk.Label(khung, text="Khoảng cách tới trường (km):", **self._style_nhan()).grid(row=0, column=2, sticky="w", pady=6)
+        self.entry_kc_truong = ttk.Entry(khung, font=self.FONT_ENTRY, width=14)
+        self.entry_kc_truong.insert(0, "1.5")
+        self.entry_kc_truong.grid(row=0, column=3, sticky="w", padx=6, pady=6)
 
-    # ══════════════════════════════════════════
-    #  TAB 1 – TÍNH ĐƠN LẺ
-    # ══════════════════════════════════════════
-    def _build_tab_form(self):
-        parent = self.tab_form
-        canvas = tk.Canvas(parent, bg=COLORS["surface"], highlightthickness=0)
-        sb = ttk.Scrollbar(parent, orient="vertical", command=canvas.yview)
-        canvas.configure(yscrollcommand=sb.set)
-        sb.pack(side="right", fill="y")
-        canvas.pack(side="left", fill="both", expand=True)
-        inner = tk.Frame(canvas, bg=COLORS["surface"])
-        win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+        tk.Label(khung, text="Số người ở tối đa:", **self._style_nhan()).grid(row=1, column=0, sticky="w", pady=6)
+        self.entry_so_nguoi = ttk.Entry(khung, font=self.FONT_ENTRY, width=14)
+        self.entry_so_nguoi.insert(0, "2")
+        self.entry_so_nguoi.grid(row=1, column=1, sticky="w", padx=(6, 20), pady=6)
 
-        def _resize(e):
-            canvas.itemconfig(win_id, width=canvas.winfo_width())
-        canvas.bind("<Configure>", _resize)
-        inner.bind("<Configure>", lambda e: canvas.configure(
-            scrollregion=canvas.bbox("all")))
-        canvas.bind_all("<MouseWheel>",
-            lambda e: canvas.yview_scroll(-1*(e.delta//120), "units"))
+        tk.Label(khung, text="Phường / Khu vực:", **self._style_nhan()).grid(row=1, column=2, sticky="w", pady=6)
+        self.combo_phuong = ttk.Combobox(khung, values=self.DANH_SACH_PHUONG, font=self.FONT_ENTRY, width=22, state="readonly")
+        self.combo_phuong.current(0)
+        self.combo_phuong.grid(row=1, column=3, sticky="w", padx=6, pady=6)
 
-        pad = {"padx": 16, "pady": 6}
+    def _tao_khung_tien_ich(self, parent):
+        khung = self._tao_khung_vien(parent, "✅  Tiện Ích Kèm Theo")
+        self.tien_ich_vars = {k: tk.BooleanVar() for k in ["may_lanh", "wc_rieng", "co_bep", "gio_giac", "cho_de_xe", "gan_tien_ich"]}
 
-        # ─ Vị trí & kích thước ─
-        self._section(inner, "📍  Vị trí & Kích thước")
-        grid1 = tk.Frame(inner, bg=COLORS["surface"])
-        grid1.pack(fill="x", **pad)
-        self.sl_distance   = LabeledSlider(grid1, "Khoảng cách đến trường",
-                                            0, 20, 0.5, unit="km",
-                                            fmt=lambda v: f"{v:.1f} km")
-        self.sl_area       = LabeledSlider(grid1, "Diện tích phòng",
-                                            0, 80, 1, unit="m²",
-                                            fmt=lambda v: f"{v:.0f} m²")
-        self.sl_hour_free  = LabeledSlider(grid1, "Giờ tự do ra vào",
-                                            0, 24, 1, unit="h",
-                                            fmt=lambda v: f"{v:.0f} h/ngày")
-        self.sl_people_max = LabeledSlider(grid1, "Số người ở tối đa",
-                                            1, 6, 1, unit=" người")
-        for w in (self.sl_distance, self.sl_area,
-                  self.sl_hour_free, self.sl_people_max):
-            w.pack(fill="x", pady=4)
-        # Set defaults
-        self.sl_distance.var.set(3)
-        self.sl_area.var.set(20)
-        self.sl_hour_free.var.set(12)
-        self.sl_people_max.var.set(2)
-        for w in (self.sl_distance, self.sl_area,
-                  self.sl_hour_free, self.sl_people_max):
-            w._on_change(w.var.get())
+        danh_sach_tien_ich = [
+            ("may_lanh", "❄️  Có máy lạnh"), ("wc_rieng", "🚿  WC riêng"),
+            ("co_bep", "🍳  Có bếp nấu"), ("gio_giac", "🕐  Giờ giấc tự do"),
+            ("cho_de_xe", "🛵  Chỗ để xe"), ("gan_tien_ich", "🚌  Gần Bus / Siêu thị"),
+        ]
 
-        # ─ Tiện ích ─
-        self._section(inner, "🏠  Tiện ích phòng & khu vực")
-        grid2 = tk.Frame(inner, bg=COLORS["surface"])
-        grid2.pack(fill="x", **pad)
-        self.tog_parking = ToggleButton(grid2, "🏍️  Chỗ đậu xe")
-        self.tog_ac      = ToggleButton(grid2, "❄️  Máy lạnh")
-        self.tog_wc      = ToggleButton(grid2, "🚿  WC riêng")
-        self.tog_kitchen = ToggleButton(grid2, "🍳  Nhà bếp")
-        self.tog_bus     = ToggleButton(grid2, "🚌  Gần trạm bus")
-        self.tog_market  = ToggleButton(grid2, "🛒  Gần siêu thị")
-        toggles = [self.tog_parking, self.tog_ac, self.tog_wc,
-                   self.tog_kitchen, self.tog_bus, self.tog_market]
-        for i, w in enumerate(toggles):
-            w.grid(row=i//3, column=i%3, padx=8, pady=6, sticky="nsew")
-        grid2.columnconfigure((0,1,2), weight=1)
+        for i, (key, nhan) in enumerate(danh_sach_tien_ich):
+            cb = tk.Checkbutton(khung, text=nhan, variable=self.tien_ich_vars[key], font=self.FONT_NHAN, bg=self.MAU_FRAME, fg=self.MAU_NHAN, activebackground=self.MAU_FRAME, selectcolor="#E3F2FD", cursor="hand2")
+            cb.grid(row=i // 3, column=i % 3, sticky="w", padx=12, pady=5)
 
-        # ─ Nút dự đoán ─
-        tk.Button(inner, text="✨  DỰ ĐOÁN GIÁ THUÊ",
-                  font=FONT_TITLE, bg=COLORS["accent"], fg="white",
-                  activebackground=COLORS["accent_dark"], activeforeground="white",
-                  relief="flat", bd=0, padx=20, pady=12,
-                  cursor="hand2", command=self._predict_single).pack(
-                  fill="x", padx=16, pady=14)
+    def _tao_khung_nut(self, parent):
+        frame_nut = tk.Frame(parent, bg=self.MAU_NEN, pady=10)
+        frame_nut.pack(fill="x")
 
-        # ─ Kết quả ─
-        self.result_frame = tk.Frame(inner, bg=COLORS["accent_light"],
-                                     relief="flat", bd=0)
-        self.result_frame.pack(fill="x", padx=16, pady=(0, 12))
-        self.lbl_price = tk.Label(self.result_frame, text="",
-                                  font=("Segoe UI", 22, "bold"),
-                                  bg=COLORS["accent_light"], fg=COLORS["accent_dark"])
-        self.lbl_price.pack(pady=(14, 2))
-        self.lbl_tier  = tk.Label(self.result_frame, text="",
-                                  font=FONT_HEAD,
-                                  bg=COLORS["accent_light"], fg=COLORS["text_muted"])
-        self.lbl_tier.pack(pady=(0, 6))
-        self.lbl_factors = tk.Label(self.result_frame, text="",
-                                    font=FONT_SMALL, wraplength=580,
-                                    bg=COLORS["accent_light"], fg=COLORS["text_muted"],
-                                    justify="left")
-        self.lbl_factors.pack(padx=14, pady=(0, 14))
+        btn_du_doan = tk.Button(frame_nut, text="🔍  Dự Đoán Giá Thuê", font=self.FONT_NUT, bg=self.MAU_NUT_DU_DOAN, fg="white", relief="flat", padx=20, pady=10, cursor="hand2", command=self._xu_ly_du_doan)
+        btn_du_doan.pack(side="left", expand=True, fill="x", padx=(0, 8))
 
-    def _section(self, parent, text):
-        f = tk.Frame(parent, bg=COLORS["surface2"], height=1)
-        f.pack(fill="x", padx=16, pady=(14, 4))
-        tk.Label(parent, text=text, font=FONT_HEAD,
-                 bg=COLORS["surface"], fg=COLORS["text"]).pack(
-                 anchor="w", padx=16, pady=(4, 0))
+        btn_ban_do = tk.Button(frame_nut, text="🗺️  Xem Bản Đồ Nhiệt Giá Trọ", font=self.FONT_NUT, bg=self.MAU_NUT_BAN_DO, fg="white", relief="flat", padx=20, pady=10, cursor="hand2", command=self._mo_ban_do_nhiet)
+        btn_ban_do.pack(side="left", expand=True, fill="x", padx=(8, 0))
 
-    def _predict_single(self):
+        btn_du_doan.bind("<Enter>", lambda e: btn_du_doan.config(bg="#0D47A1"))
+        btn_du_doan.bind("<Leave>", lambda e: btn_du_doan.config(bg=self.MAU_NUT_DU_DOAN))
+        btn_ban_do.bind("<Enter>", lambda e: btn_ban_do.config(bg="#1B5E20"))
+        btn_ban_do.bind("<Leave>", lambda e: btn_ban_do.config(bg=self.MAU_NUT_BAN_DO))
+
+    def _tao_khung_ket_qua(self, parent):
+        khung = self._tao_khung_vien(parent, "📊  Kết Quả Dự Đoán")
+        self.lbl_ket_qua = tk.Label(khung, text="— Nhập thông tin và nhấn 'Dự Đoán Giá Thuê' —", font=("Segoe UI", 12), bg=self.MAU_FRAME, fg="#90A4AE")
+        self.lbl_ket_qua.pack(pady=10)
+        self.lbl_chi_tiet = tk.Label(khung, text="", font=("Segoe UI", 9), bg=self.MAU_FRAME, fg="#78909C", justify="center")
+        self.lbl_chi_tiet.pack(pady=(0, 8))
+
+    def _xu_ly_du_doan(self):
         try:
-            inputs = self._collect_inputs()
-            self.price_sim.input['distance']      = inputs['distance']
-            self.price_sim.input['area']          = inputs['area']
-            self.price_sim.input['hour_free']     = inputs['hour_free']
-            self.price_sim.input['people_max']    = inputs['people_max']
-            self.price_sim.input['parking']       = inputs['parking']
-            self.price_sim.input['air_condition'] = inputs['air_condition']
-            self.price_sim.input['WC_private']    = inputs['WC_private']
-            self.price_sim.input['kitchen']       = inputs['kitchen']
-            self.price_sim.input['bus']           = inputs['bus']
-            self.price_sim.input['supermarket']   = inputs['supermarket']
-            self.price_sim.compute()
-            score = self.price_sim.output['price']
-            price = score_to_price(score)
+            dien_tich = float(self.entry_dien_tich.get())
+            kc_truong = float(self.entry_kc_truong.get())
+            so_nguoi = int(self.entry_so_nguoi.get())
+            if dien_tich <= 0 or kc_truong < 0 or so_nguoi <= 0: raise ValueError
+            
+            phuong = self.combo_phuong.get()
+            tien_ich_dict = {k: v.get() for k, v in self.tien_ich_vars.items()}
+            gia_du_doan = self.mo_hinh.predict(dien_tich, kc_truong, so_nguoi, phuong, tien_ich_dict)
 
-            # Xác định mức giá
-            if score < 40:
-                tier = "📉 Giá thấp"
-                tier_color = COLORS["warn"]
-                bg_color   = COLORS["warn_light"]
-            elif score < 65:
-                tier = "📊 Giá trung bình"
-                tier_color = COLORS["accent"]
-                bg_color   = COLORS["accent_light"]
-            else:
-                tier = "📈 Giá cao"
-                tier_color = COLORS["danger"]
-                bg_color   = COLORS["danger_light"]
+            self.lbl_ket_qua.config(text=f"💰  {gia_du_doan:.2f} triệu đồng / tháng", font=self.FONT_KET_QUA, fg=self.MAU_KET_QUA)
+            
+            ten_map = {"may_lanh": "Máy lạnh", "wc_rieng": "WC riêng", "co_bep": "Bếp nấu", "gio_giac": "Tự do giờ giấc", "cho_de_xe": "Để xe", "gan_tien_ich": "Gần Bus/Siêu thị"}
+            tien_ich_co = [ten_map[k] for k, v in tien_ich_dict.items() if v]
+            str_ti = ", ".join(tien_ich_co) if tien_ich_co else "Không có"
+            self.lbl_chi_tiet.config(text=f"Diện tích: {dien_tich}m² | Cách trường: {kc_truong}km | {so_nguoi} người | {phuong}\nTiện ích: {str_ti}")
+        except:
+            messagebox.showerror("Lỗi nhập liệu", "Vui lòng nhập đúng định dạng số dương!")
 
-            factors = self._get_factors(inputs)
+    def _mo_ban_do_nhiet(self):
+        ten_file = "heatmap.html"
+        if not os.path.exists(ten_file): self._tao_heatmap_mau(ten_file)
+        webbrowser.open(f"file:///{os.path.abspath(ten_file)}")
 
-            self.result_frame.config(bg=bg_color)
-            self.lbl_price.config(text=format_price(price), bg=bg_color,
-                                  fg=COLORS["accent_dark"])
-            self.lbl_tier.config(text=tier, fg=tier_color, bg=bg_color)
-            self.lbl_factors.config(text=factors, bg=bg_color)
+    def _tao_heatmap_mau(self, ten_file):
+        noi_dung = """<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Bản Đồ Nhiệt</title><style>body{font-family:'Segoe UI',sans-serif;background:#1a1a2e;color:white;display:flex;flex-direction:column;align-items:center;padding:30px;}iframe{border-radius:12px;border:2px solid #37474f;width:900px;height:500px;}</style></head><body><h1>🗺️ Bản Đồ Nhiệt Giá Phòng Trọ</h1><iframe src="https://www.openstreetmap.org/export/embed.html?bbox=106.6,10.75,106.85,10.9&amp;layer=mapnik"></iframe></body></html>"""
+        with open(ten_file, "w", encoding="utf-8") as f: f.write(noi_dung)
 
-            # Lưu lịch sử
-            self.history.insert(0, {
-                "price": price, "score": score, "tier": tier,
-                "distance": inputs['distance'],
-                "area": inputs['area'],
-                "ac": self.tog_ac.get(),
-                "wc": self.tog_wc.get(),
-                "kitchen": self.tog_kitchen.get(),
-                "parking": self.tog_parking.get(),
-            })
-            if len(self.history) > 50:
-                self.history.pop()
-            self._refresh_history()
+    def _tao_khung_vien(self, parent, tieu_de):
+        lf = tk.LabelFrame(parent, text=f"  {tieu_de}  ", font=self.FONT_PHAN, bg=self.MAU_FRAME, fg=self.MAU_HEADER, bd=1, relief="solid", labelanchor="nw", padx=14, pady=10)
+        lf.pack(fill="x", pady=(0, 12))
+        return lf
 
-        except Exception as e:
-            messagebox.showerror("Lỗi", f"Hệ thống lỗi:\n{e}")
+    def _style_nhan(self):
+        return {"font": self.FONT_NHAN, "bg": self.MAU_FRAME, "fg": self.MAU_NHAN}
 
-    def _collect_inputs(self) -> dict:
-        return {
-            'distance':      self.sl_distance.get(),
-            'area':          self.sl_area.get(),
-            'hour_free':     self.sl_hour_free.get(),
-            'people_max':    self.sl_people_max.get(),
-            'parking':       bool_to_fuzzy(self.tog_parking.get()),
-            'air_condition': bool_to_fuzzy(self.tog_ac.get()),
-            'WC_private':    bool_to_fuzzy(self.tog_wc.get()),
-            'kitchen':       bool_to_fuzzy(self.tog_kitchen.get()),
-            'bus':           bool_to_fuzzy(self.tog_bus.get()),
-            'supermarket':   bool_to_fuzzy(self.tog_market.get()),
-        }
-
-    def _get_factors(self, inp) -> str:
-        facts = []
-        if inp['distance'] <= 3:
-            facts.append("✅ Gần trường (≤3km) → tăng giá")
-        elif inp['distance'] >= 10:
-            facts.append("⚠️ Xa trường (≥10km) → giảm giá")
-        if inp['area'] >= 50:
-            facts.append("✅ Phòng rộng (≥50m²) → tăng giá")
-        elif inp['area'] < 20:
-            facts.append("⚠️ Phòng nhỏ (<20m²) → giảm giá")
-        if inp['air_condition'] == 0:
-            facts.append("✅ Có máy lạnh → tăng giá")
-        else:
-            facts.append("⚠️ Không máy lạnh → giảm giá")
-        if inp['WC_private'] == 0:
-            facts.append("✅ WC riêng → tăng giá")
-        if inp['kitchen'] == 0:
-            facts.append("✅ Có bếp → tăng giá")
-        if inp['parking'] == 0 and inp['bus'] == 0:
-            facts.append("⚠️ Không xe, không bus → giảm giá")
-        if inp['supermarket'] == 0 and inp['bus'] == 0:
-            facts.append("⚠️ Thiếu tiện ích khu vực → giảm giá")
-        return "  |  ".join(facts) if facts else "Không có yếu tố đặc biệt."
-
-    # ══════════════════════════════════════════
-    #  TAB 2 – XỬ LÝ CSV
-    # ══════════════════════════════════════════
-    def _build_tab_csv(self):
-        parent = self.tab_csv
-        top = tk.Frame(parent, bg=COLORS["surface"])
-        top.pack(fill="x", padx=16, pady=14)
-
-        tk.Label(top, text="Xử lý hàng loạt từ file CSV",
-                 font=FONT_HEAD, bg=COLORS["surface"], fg=COLORS["text"]).pack(
-                 anchor="w", pady=(0, 4))
-        tk.Label(top, text=(
-            "File CSV cần có các cột: distance, area, hour_free, people_max,\n"
-            "parking, air_condition, WC_private, kitchen, bus, supermarket\n"
-            "(Các cột boolean: 0 = Có, 100 = Không)"),
-                 font=FONT_SMALL, bg=COLORS["surface"],
-                 fg=COLORS["text_muted"], justify="left").pack(anchor="w")
-
-        btn_frame = tk.Frame(parent, bg=COLORS["surface"])
-        btn_frame.pack(fill="x", padx=16, pady=6)
-        tk.Button(btn_frame, text="📂  Chọn file CSV",
-                  font=FONT_BODY, bg=COLORS["accent"], fg="white",
-                  activebackground=COLORS["accent_dark"],
-                  relief="flat", bd=0, padx=14, pady=8,
-                  cursor="hand2", command=self._process_csv).pack(
-                  side="left", padx=(0, 10))
-        tk.Button(btn_frame, text="💾  Xuất kết quả",
-                  font=FONT_BODY, bg=COLORS["surface2"], fg=COLORS["text"],
-                  relief="flat", bd=0, padx=14, pady=8,
-                  cursor="hand2", command=self._export_csv).pack(side="left")
-
-        # Bảng kết quả
-        tbl_frame = tk.Frame(parent, bg=COLORS["surface"])
-        tbl_frame.pack(fill="both", expand=True, padx=16, pady=8)
-
-        cols = ("STT", "Điểm Fuzzy", "Giá dự báo", "Mức giá")
-        self.csv_tree = ttk.Treeview(tbl_frame, columns=cols,
-                                     show="headings", height=18)
-        widths = [60, 120, 160, 130]
-        for col, w in zip(cols, widths):
-            self.csv_tree.heading(col, text=col)
-            self.csv_tree.column(col, width=w, anchor="center")
-
-        sb_y = ttk.Scrollbar(tbl_frame, orient="vertical",
-                              command=self.csv_tree.yview)
-        sb_x = ttk.Scrollbar(tbl_frame, orient="horizontal",
-                              command=self.csv_tree.xview)
-        self.csv_tree.configure(yscrollcommand=sb_y.set,
-                                xscrollcommand=sb_x.set)
-        sb_y.pack(side="right", fill="y")
-        sb_x.pack(side="bottom", fill="x")
-        self.csv_tree.pack(fill="both", expand=True)
-
-        self.csv_df_result = None  # giữ kết quả để xuất
-
-    def _process_csv(self):
-        path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
-        if not path:
-            return
-        try:
-            df = pd.read_csv(path)
-            required = ['distance', 'area', 'hour_free', 'people_max',
-                        'parking', 'air_condition', 'WC_private',
-                        'kitchen', 'bus', 'supermarket']
-            missing = [c for c in required if c not in df.columns]
-            if missing:
-                messagebox.showerror("Lỗi cột",
-                    f"Thiếu các cột: {', '.join(missing)}")
-                return
-
-            for row in self.csv_tree.get_children():
-                self.csv_tree.delete(row)
-
-            scores, prices, tiers = [], [], []
-            for idx, row in df.iterrows():
-                for k in required:
-                    self.price_sim.input[k] = float(row[k])
-                self.price_sim.compute()
-                score = self.price_sim.output['price']
-                price = score_to_price(score)
-                tier = ("Thấp" if score < 40 else
-                        "Trung bình" if score < 65 else "Cao")
-                scores.append(round(score, 2))
-                prices.append(price)
-                tiers.append(tier)
-                tag = "low" if score < 40 else "med" if score < 65 else "high"
-                self.csv_tree.insert("", "end", values=(
-                    idx + 1,
-                    f"{score:.1f}/100",
-                    format_price(price),
-                    tier
-                ), tags=(tag,))
-
-            self.csv_tree.tag_configure("low",  background=COLORS["warn_light"])
-            self.csv_tree.tag_configure("med",  background=COLORS["accent_light"])
-            self.csv_tree.tag_configure("high", background=COLORS["danger_light"])
-
-            df["score"]  = scores
-            df["price"]  = prices
-            df["tier"]   = tiers
-            self.csv_df_result = df
-            messagebox.showinfo("Hoàn tất",
-                f"Đã xử lý {len(df)} dòng.\n"
-                f"Giá trung bình: {format_price(sum(prices)/len(prices))}")
-        except Exception as e:
-            messagebox.showerror("Lỗi", str(e))
-
-    def _export_csv(self):
-        if self.csv_df_result is None:
-            messagebox.showwarning("Chưa có dữ liệu",
-                                   "Vui lòng xử lý file CSV trước.")
-            return
-        path = filedialog.asksaveasfilename(
-            defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv")],
-            initialfile="ket_qua_du_bao.csv")
-        if path:
-            self.csv_df_result.to_csv(path, index=False, encoding="utf-8-sig")
-            messagebox.showinfo("Đã xuất", f"Lưu thành công:\n{path}")
-
-    # ══════════════════════════════════════════
-    #  TAB 3 – BIỂU ĐỒ
-    # ══════════════════════════════════════════
-    def _build_tab_chart(self):
-        parent = self.tab_chart
-        ctrl_frame = tk.Frame(parent, bg=COLORS["surface"])
-        ctrl_frame.pack(fill="x", padx=16, pady=10)
-
-        tk.Label(ctrl_frame, text="Loại biểu đồ:",
-                 font=FONT_BODY, bg=COLORS["surface"],
-                 fg=COLORS["text_muted"]).pack(side="left")
-        self.chart_type = tk.StringVar(value="heatmap")
-        for val, lbl in [("heatmap", "Bản đồ nhiệt giá"),
-                          ("membership", "Hàm thành viên"),
-                          ("bar", "So sánh yếu tố")]:
-            tk.Radiobutton(ctrl_frame, text=lbl, variable=self.chart_type,
-                           value=val, font=FONT_SMALL,
-                           bg=COLORS["surface"], fg=COLORS["text"],
-                           activebackground=COLORS["surface"],
-                           selectcolor=COLORS["accent_light"],
-                           command=self._draw_chart).pack(
-                           side="left", padx=8)
-
-        self.chart_frame = tk.Frame(parent, bg=COLORS["surface"])
-        self.chart_frame.pack(fill="both", expand=True, padx=8, pady=4)
-        self._draw_chart()
-
-    def _draw_chart(self):
-        for w in self.chart_frame.winfo_children():
-            w.destroy()
-
-        fig = Figure(figsize=(8, 4.5), dpi=96,
-                     facecolor=COLORS["surface"])
-        chart_t = self.chart_type.get()
-
-        if chart_t == "heatmap":
-            self._chart_heatmap(fig)
-        elif chart_t == "membership":
-            self._chart_membership(fig)
-        else:
-            self._chart_bar(fig)
-
-        canvas = FigureCanvasTkAgg(fig, master=self.chart_frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True)
-
-    def _chart_heatmap(self, fig):
-        ax = fig.add_subplot(111)
-        distances = np.arange(1, 16, 2.5)
-        areas = np.arange(10, 75, 12)
-        Z = np.zeros((len(areas), len(distances)))
-        for i, ar in enumerate(areas):
-            for j, di in enumerate(distances):
-                self.price_sim.input['distance']      = di
-                self.price_sim.input['area']          = ar
-                self.price_sim.input['hour_free']     = 12
-                self.price_sim.input['people_max']    = 2
-                self.price_sim.input['parking']       = 0
-                self.price_sim.input['air_condition'] = 0
-                self.price_sim.input['WC_private']    = 100
-                self.price_sim.input['kitchen']       = 0
-                self.price_sim.input['bus']           = 0
-                self.price_sim.input['supermarket']   = 0
-                self.price_sim.compute()
-                score = self.price_sim.output['price']
-                Z[i, j] = score_to_price(score) / 1_000_000
-
-        im = ax.imshow(Z, aspect="auto", cmap="RdYlGn_r",
-                       origin="lower", interpolation="bilinear")
-        ax.set_xticks(range(len(distances)))
-        ax.set_xticklabels([f"{d:.0f}km" for d in distances], fontsize=8)
-        ax.set_yticks(range(len(areas)))
-        ax.set_yticklabels([f"{a:.0f}m²" for a in areas], fontsize=8)
-        ax.set_xlabel("Khoảng cách đến trường", fontsize=9)
-        ax.set_ylabel("Diện tích phòng", fontsize=9)
-        ax.set_title("Bản đồ nhiệt giá thuê (triệu đồng/tháng) — tiện ích cơ bản",
-                     fontsize=10, fontweight="bold")
-        for i in range(len(areas)):
-            for j in range(len(distances)):
-                ax.text(j, i, f"{Z[i,j]:.1f}", ha="center", va="center",
-                        fontsize=7, color="black", fontweight="bold")
-        fig.colorbar(im, ax=ax, label="Triệu đồng/tháng")
-        fig.tight_layout()
-
-    def _chart_membership(self, fig):
-        axs = fig.subplots(1, 3)
-        x_d = np.arange(0, 21, 0.1)
-        axs[0].fill_between(x_d, fuzz.trimf(x_d, [0,0,5]),   alpha=0.4,
-                             color="#1D9E75", label="Gần")
-        axs[0].fill_between(x_d, fuzz.trimf(x_d, [0,5,10]),  alpha=0.4,
-                             color="#BA7517", label="Trung bình")
-        axs[0].fill_between(x_d, fuzz.trimf(x_d, [5,10,20]), alpha=0.4,
-                             color="#A32D2D", label="Xa")
-        axs[0].set_title("Khoảng cách (km)", fontsize=9, fontweight="bold")
-        axs[0].legend(fontsize=7); axs[0].set_ylim(0, 1.1)
-
-        x_a = np.arange(0, 81, 1)
-        axs[1].fill_between(x_a, fuzz.trimf(x_a, [0,0,40]),  alpha=0.4,
-                             color="#1D9E75", label="Nhỏ")
-        axs[1].fill_between(x_a, fuzz.trimf(x_a, [30,40,60]),alpha=0.4,
-                             color="#BA7517", label="Vừa")
-        axs[1].fill_between(x_a, fuzz.trimf(x_a, [50,60,80]),alpha=0.4,
-                             color="#A32D2D", label="Rộng")
-        axs[1].set_title("Diện tích (m²)", fontsize=9, fontweight="bold")
-        axs[1].legend(fontsize=7); axs[1].set_ylim(0, 1.1)
-
-        x_p = np.arange(0, 101, 1)
-        axs[2].fill_between(x_p, fuzz.trimf(x_p, [0,0,50]),  alpha=0.4,
-                             color="#1D9E75", label="Thấp")
-        axs[2].fill_between(x_p, fuzz.trimf(x_p, [30,50,70]),alpha=0.4,
-                             color="#BA7517", label="Trung bình")
-        axs[2].fill_between(x_p, fuzz.trimf(x_p, [50,70,100]),alpha=0.4,
-                             color="#A32D2D", label="Cao")
-        axs[2].set_title("Giá (điểm 0–100)", fontsize=9, fontweight="bold")
-        axs[2].legend(fontsize=7); axs[2].set_ylim(0, 1.1)
-
-        for ax in axs:
-            ax.set_facecolor(COLORS["surface"])
-            ax.spines["top"].set_visible(False)
-            ax.spines["right"].set_visible(False)
-        fig.suptitle("Hàm thành viên Fuzzy", fontsize=10, fontweight="bold")
-        fig.tight_layout()
-
-    def _chart_bar(self, fig):
-        ax = fig.add_subplot(111)
-        scenarios = {
-            "Gần+Rộng\n+Đủ tiện ích": {"distance":1,"area":65,"hour_free":20,"people_max":2,
-                                         "parking":0,"air_condition":0,"WC_private":0,
-                                         "kitchen":0,"bus":0,"supermarket":0},
-            "Gần+Nhỏ\n+Cơ bản":       {"distance":2,"area":15,"hour_free":12,"people_max":2,
-                                         "parking":0,"air_condition":0,"WC_private":100,
-                                         "kitchen":100,"bus":0,"supermarket":0},
-            "Xa+Vừa\n+Cơ bản":         {"distance":12,"area":35,"hour_free":12,"people_max":2,
-                                         "parking":100,"air_condition":100,"WC_private":100,
-                                         "kitchen":100,"bus":0,"supermarket":100},
-            "Xa+Nhỏ\n+Tối giản":       {"distance":18,"area":12,"hour_free":5,"people_max":1,
-                                         "parking":100,"air_condition":100,"WC_private":100,
-                                         "kitchen":100,"bus":100,"supermarket":100},
-        }
-        labels, vals, colors = [], [], []
-        palette = [COLORS["danger"], COLORS["accent"], COLORS["warn"], COLORS["text_muted"]]
-        for (lbl, inp), color in zip(scenarios.items(), palette):
-            for k, v in inp.items():
-                self.price_sim.input[k] = v
-            self.price_sim.compute()
-            score = self.price_sim.output['price']
-            price = score_to_price(score) / 1_000_000
-            labels.append(lbl); vals.append(price); colors.append(color)
-
-        bars = ax.bar(labels, vals, color=colors, width=0.5,
-                      edgecolor="white", linewidth=1.5)
-        for bar, v in zip(bars, vals):
-            ax.text(bar.get_x() + bar.get_width()/2,
-                    bar.get_height() + 0.05,
-                    f"{v:.1f} tr", ha="center", va="bottom",
-                    fontsize=9, fontweight="bold")
-        ax.set_ylabel("Triệu đồng / tháng", fontsize=9)
-        ax.set_title("So sánh giá thuê theo kịch bản", fontsize=10, fontweight="bold")
-        ax.set_facecolor(COLORS["surface"])
-        ax.spines["top"].set_visible(False)
-        ax.spines["right"].set_visible(False)
-        ax.set_ylim(0, max(vals) * 1.2)
-        fig.tight_layout()
-
-    # ══════════════════════════════════════════
-    #  TAB 4 – LỊCH SỬ
-    # ══════════════════════════════════════════
-    def _build_tab_history(self):
-        parent = self.tab_history
-        top = tk.Frame(parent, bg=COLORS["surface"])
-        top.pack(fill="x", padx=16, pady=10)
-        tk.Label(top, text="Lịch sử dự đoán (phiên làm việc)",
-                 font=FONT_HEAD, bg=COLORS["surface"], fg=COLORS["text"]).pack(
-                 side="left")
-        tk.Button(top, text="🗑️  Xoá tất cả",
-                  font=FONT_SMALL, bg=COLORS["surface2"], fg=COLORS["text"],
-                  relief="flat", bd=0, padx=10, pady=5,
-                  cursor="hand2",
-                  command=lambda: (self.history.clear(), self._refresh_history())).pack(
-                  side="right")
-
-        cols = ("STT","Giá dự báo","Mức giá","Khoảng cách","Diện tích","Máy lạnh","WC riêng","Bếp","Đậu xe")
-        self.hist_tree = ttk.Treeview(parent, columns=cols,
-                                      show="headings", height=20)
-        widths = [40, 140, 110, 110, 90, 80, 80, 60, 70]
-        for col, w in zip(cols, widths):
-            self.hist_tree.heading(col, text=col)
-            self.hist_tree.column(col, width=w, anchor="center")
-
-        sb = ttk.Scrollbar(parent, orient="vertical",
-                           command=self.hist_tree.yview)
-        self.hist_tree.configure(yscrollcommand=sb.set)
-        sb.pack(side="right", fill="y", padx=(0, 8))
-        self.hist_tree.pack(fill="both", expand=True, padx=16, pady=4)
-        self.hist_tree.tag_configure("low",  background=COLORS["warn_light"])
-        self.hist_tree.tag_configure("med",  background=COLORS["accent_light"])
-        self.hist_tree.tag_configure("high", background=COLORS["danger_light"])
-
-    def _refresh_history(self):
-        for row in self.hist_tree.get_children():
-            self.hist_tree.delete(row)
-        for i, h in enumerate(self.history):
-            s = h["score"]
-            tag = "low" if s < 40 else "med" if s < 65 else "high"
-            self.hist_tree.insert("", "end", values=(
-                i + 1,
-                format_price(h["price"]),
-                h["tier"].split(" ", 1)[-1],
-                f"{h['distance']:.1f} km",
-                f"{h['area']:.0f} m²",
-                "Có" if h["ac"] else "Không",
-                "Có" if h["wc"] else "Không",
-                "Có" if h["kitchen"] else "Không",
-                "Có" if h["parking"] else "Không",
-            ), tags=(tag,))
-
-
-# ─────────────────────────────────────────────
-#  KHỞI CHẠY
-# ─────────────────────────────────────────────
 if __name__ == "__main__":
     root = tk.Tk()
-    try:
-        root.iconbitmap("icon.ico")
-    except Exception:
-        pass
-    app = RentAIApp(root)
+    style = ttk.Style()
+    style.theme_use("clam")
+    style.configure("TEntry", fieldbackground="#FAFAFA", bordercolor="#90CAF9", padding=5)
+    style.configure("TCombobox", fieldbackground="#FAFAFA", bordercolor="#90CAF9", padding=5)
+    app = AppDuDoanGiaPhongTro(root)
     root.mainloop()
