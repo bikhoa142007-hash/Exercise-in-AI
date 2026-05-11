@@ -1,1 +1,702 @@
 
+import tkinter as tk
+from tkinter import ttk, messagebox, font
+import json
+import os
+import hashlib
+import threading
+import time
+from datetime import datetime
+
+# ────────────────────────────────────────────────
+#  TRY IMPORTING SERIAL (pyserial)
+# ────────────────────────────────────────────────
+try:
+    import serial
+    import serial.tools.list_ports
+    SERIAL_AVAILABLE = True
+except ImportError:
+    SERIAL_AVAILABLE = False
+
+# ────────────────────────────────────────────────
+#  CONSTANTS & PATHS
+# ────────────────────────────────────────────────
+DATA_FILE = "users.json"
+WIN_W, WIN_H = 1000, 500
+PANEL_W = 500
+
+# Color palette
+C_BG       = "#0D1B2A"   # deep navy
+C_PANEL    = "#1B2838"   # slightly lighter navy
+C_CARD     = "#16213E"   # card background
+C_RED      = "#E63946"   # primary red
+C_BLUE     = "#457B9D"   # primary blue
+C_GREEN    = "#2EC4B6"   # primary green (teal-green)
+C_ACCENT   = "#F4A261"   # warm accent
+C_TEXT     = "#E0E0E0"
+C_SUBTEXT  = "#8899AA"
+C_ENTRY_BG = "#1E3050"
+C_BORDER   = "#2A4060"
+C_SUCCESS  = "#2EC4B6"
+C_ERROR    = "#E63946"
+
+# ────────────────────────────────────────────────
+#  USER DATA HELPERS
+# ────────────────────────────────────────────────
+def load_users():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def save_users(users):
+    with open(DATA_FILE, "w", encoding="utf-8") as f:
+        json.dump(users, f, ensure_ascii=False, indent=2)
+
+def hash_password(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+
+# ════════════════════════════════════════════════
+#  LOGIN WINDOW
+# ════════════════════════════════════════════════
+class LoginWindow(tk.Frame):
+    def __init__(self, master, on_login_success):
+        super().__init__(master, bg=C_BG, width=WIN_W, height=WIN_H)
+        self.master = master
+        self.on_login_success = on_login_success
+        self.pack_propagate(False)
+        self.pack(fill="both", expand=True)
+
+        self.mode = None          # "login" | "register" | "forgot"
+        self.users = load_users()
+
+        self._build_left_panel()
+        self._build_right_panel()
+
+    # ── LEFT PANEL (image / welcome message) ─────
+    def _build_left_panel(self):
+        self.left = tk.Frame(self, bg=C_PANEL, width=PANEL_W, height=WIN_H)
+        self.left.pack(side="left", fill="both")
+        self.left.pack_propagate(False)
+
+        # Try to load logo image
+        self.logo_label = None
+        try:
+            from PIL import Image, ImageTk
+            img = Image.open("IT_BLIND_CLUB.png").resize((260, 260))
+            self.logo_img = ImageTk.PhotoImage(img)
+            img_lbl = tk.Label(self.left, image=self.logo_img, bg=C_PANEL)
+            img_lbl.place(relx=0.5, rely=0.3, anchor="center")
+        except Exception:
+            # Placeholder if PIL/image not available
+            canvas = tk.Canvas(self.left, width=200, height=200,
+                               bg=C_PANEL, highlightthickness=0)
+            canvas.place(relx=0.5, rely=0.25, anchor="center")
+            # Draw decorative circles
+            canvas.create_oval(10, 10, 190, 190, outline=C_BLUE, width=3)
+            canvas.create_oval(30, 30, 170, 170, outline=C_GREEN, width=2)
+            canvas.create_oval(50, 50, 150, 150, fill=C_CARD,
+                               outline=C_RED, width=2)
+            canvas.create_text(100, 100, text="IT\nBLIND\nCLUB",
+                               fill=C_TEXT, font=("Courier", 16, "bold"),
+                               justify="center")
+
+        # Decorative colour strips at top
+        strip = tk.Frame(self.left, height=4, bg=C_RED)
+        strip.place(x=0, y=0, relwidth=1)
+        strip2 = tk.Frame(self.left, height=4, bg=C_BLUE)
+        strip2.place(x=0, y=4, relwidth=1)
+        strip3 = tk.Frame(self.left, height=4, bg=C_GREEN)
+        strip3.place(x=0, y=8, relwidth=1)
+
+        # Welcome message label
+        self.welcome_var = tk.StringVar(value="Welcome to IT BLIND CLUB")
+        self.welcome_lbl = tk.Label(
+            self.left,
+            textvariable=self.welcome_var,
+            bg=C_PANEL, fg=C_TEXT,
+            font=("Georgia", 16, "bold"),
+            wraplength=380, justify="center"
+        )
+        self.welcome_lbl.place(relx=0.5, rely=0.72, anchor="center")
+
+        # Sub tagline
+        self.sub_lbl = tk.Label(
+            self.left,
+            text="Hệ thống phân loại băng truyền tự động",
+            bg=C_PANEL, fg=C_SUBTEXT,
+            font=("Georgia", 9, "italic"),
+            wraplength=340, justify="center"
+        )
+        self.sub_lbl.place(relx=0.5, rely=0.82, anchor="center")
+
+        # Color dot indicators
+        dot_frame = tk.Frame(self.left, bg=C_PANEL)
+        dot_frame.place(relx=0.5, rely=0.92, anchor="center")
+        for col, lbl in [(C_RED, "Đỏ"), (C_BLUE, "Xanh dương"), (C_GREEN, "Xanh lá")]:
+            tk.Frame(dot_frame, bg=col, width=12, height=12).pack(side="left", padx=4)
+            tk.Label(dot_frame, text=lbl, bg=C_PANEL, fg=C_SUBTEXT,
+                     font=("Arial", 8)).pack(side="left", padx=(0, 10))
+
+    # ── RIGHT PANEL (login form) ──────────────────
+    def _build_right_panel(self):
+        self.right = tk.Frame(self, bg=C_BG, width=PANEL_W, height=WIN_H)
+        self.right.pack(side="right", fill="both")
+        self.right.pack_propagate(False)
+
+        # Title
+        tk.Label(self.right, text="IT Blind Club", bg=C_BG, fg=C_RED,
+                 font=("Georgia", 22, "bold")).place(relx=0.5, rely=0.10, anchor="center")
+        tk.Label(self.right, text="─────────────────────────",
+                 bg=C_BG, fg=C_BORDER).place(relx=0.5, rely=0.17, anchor="center")
+
+        # Mode buttons
+        btn_frame = tk.Frame(self.right, bg=C_BG)
+        btn_frame.place(relx=0.5, rely=0.26, anchor="center")
+
+        self.btn_login = self._tab_btn(btn_frame, "Đăng nhập", lambda: self._set_mode("login"))
+        self.btn_login.pack(side="left", padx=4)
+        self.btn_register = self._tab_btn(btn_frame, "Đăng ký", lambda: self._set_mode("register"))
+        self.btn_register.pack(side="left", padx=4)
+        self.btn_forgot = self._tab_btn(btn_frame, "Quên mật khẩu", lambda: self._set_mode("forgot"))
+        self.btn_forgot.pack(side="left", padx=4)
+
+        # Dynamic form area
+        self.form_frame = tk.Frame(self.right, bg=C_BG)
+        self.form_frame.place(relx=0.5, rely=0.57, anchor="center", width=340)
+
+        # Status message
+        self.status_var = tk.StringVar()
+        self.status_lbl = tk.Label(self.right, textvariable=self.status_var,
+                                   bg=C_BG, fg=C_GREEN,
+                                   font=("Arial", 9), wraplength=300)
+        self.status_lbl.place(relx=0.5, rely=0.88, anchor="center")
+
+        # Enter button (hidden until mode selected)
+        self.enter_btn = tk.Button(
+            self.right, text="✔  Enter",
+            bg=C_GREEN, fg=C_BG,
+            font=("Arial", 11, "bold"),
+            relief="flat", cursor="hand2",
+            activebackground=C_BLUE,
+            command=self._on_enter
+        )
+        # Will be placed when mode is set
+
+        self._set_mode("login")
+
+    def _tab_btn(self, parent, text, cmd):
+        return tk.Button(parent, text=text, bg=C_CARD, fg=C_TEXT,
+                         font=("Arial", 9, "bold"), relief="flat",
+                         padx=10, pady=5, cursor="hand2",
+                         activebackground=C_BLUE, activeforeground="white",
+                         command=cmd)
+
+    def _styled_entry(self, parent, show=None):
+        e = tk.Entry(parent, bg=C_ENTRY_BG, fg=C_TEXT,
+                     insertbackground=C_TEXT,
+                     relief="flat", font=("Arial", 11),
+                     show=show or "")
+        e.config(highlightthickness=1,
+                 highlightbackground=C_BORDER,
+                 highlightcolor=C_BLUE)
+        return e
+
+    def _label(self, parent, text):
+        return tk.Label(parent, text=text, bg=C_BG, fg=C_SUBTEXT,
+                        font=("Arial", 9))
+
+    # ── Set active mode ───────────────────────────
+    def _set_mode(self, mode):
+        self.mode = mode
+
+        # Update welcome text on left panel
+        msg_map = {
+            "login":    "Chào mừng bạn quay trở lại! 👋",
+            "register": "Tài khoản của bạn đã sẵn sàng ✅",
+            "forgot":   "Khôi phục tài khoản 🔑",
+        }
+        self.welcome_var.set(msg_map[mode])
+
+        # Highlight active tab
+        for btn, m in [(self.btn_login, "login"),
+                       (self.btn_register, "register"),
+                       (self.btn_forgot, "forgot")]:
+            if m == mode:
+                btn.config(bg=C_RED, fg="white")
+            else:
+                btn.config(bg=C_CARD, fg=C_TEXT)
+
+        # Clear form
+        for w in self.form_frame.winfo_children():
+            w.destroy()
+        self.status_var.set("")
+
+        if mode == "login":
+            self._label(self.form_frame, "Tên đăng nhập").pack(anchor="w", pady=(0, 2))
+            self.e_user = self._styled_entry(self.form_frame)
+            self.e_user.pack(fill="x", ipady=5, pady=(0, 8))
+
+            self._label(self.form_frame, "Mật khẩu").pack(anchor="w", pady=(0, 2))
+            self.e_pass = self._styled_entry(self.form_frame, show="●")
+            self.e_pass.pack(fill="x", ipady=5)
+
+        elif mode == "register":
+            self._label(self.form_frame, "Tên đăng nhập").pack(anchor="w", pady=(0, 2))
+            self.e_user = self._styled_entry(self.form_frame)
+            self.e_user.pack(fill="x", ipady=5, pady=(0, 6))
+
+            self._label(self.form_frame, "Mật khẩu").pack(anchor="w", pady=(0, 2))
+            self.e_pass = self._styled_entry(self.form_frame, show="●")
+            self.e_pass.pack(fill="x", ipady=5, pady=(0, 6))
+
+            self._label(self.form_frame, "Xác nhận mật khẩu").pack(anchor="w", pady=(0, 2))
+            self.e_confirm = self._styled_entry(self.form_frame, show="●")
+            self.e_confirm.pack(fill="x", ipady=5)
+
+        elif mode == "forgot":
+            self._label(self.form_frame, "Tên đăng nhập").pack(anchor="w", pady=(0, 2))
+            self.e_user = self._styled_entry(self.form_frame)
+            self.e_user.pack(fill="x", ipady=5, pady=(0, 6))
+
+            self._label(self.form_frame, "Mật khẩu mới").pack(anchor="w", pady=(0, 2))
+            self.e_pass = self._styled_entry(self.form_frame, show="●")
+            self.e_pass.pack(fill="x", ipady=5)
+
+        # Show Enter button
+        self.enter_btn.place(relx=0.5, rely=0.78, anchor="center", width=160, height=36)
+
+    # ── Enter button handler ──────────────────────
+    def _on_enter(self):
+        self.users = load_users()
+        if self.mode == "login":
+            self._do_login()
+        elif self.mode == "register":
+            self._do_register()
+        elif self.mode == "forgot":
+            self._do_forgot()
+
+    def _do_login(self):
+        u = self.e_user.get().strip()
+        p = self.e_pass.get()
+        if not u or not p:
+            self._show_status("Vui lòng nhập đầy đủ thông tin.", error=True)
+            return
+        if u in self.users and self.users[u]["password"] == hash_password(p):
+            self._show_status("Đăng nhập thành công!", error=False)
+            self.master.after(600, lambda: self.on_login_success(u))
+        else:
+            self._show_status("Sai tên đăng nhập hoặc mật khẩu.", error=True)
+
+    def _do_register(self):
+        u = self.e_user.get().strip()
+        p = self.e_pass.get()
+        c = self.e_confirm.get()
+        if not u or not p:
+            self._show_status("Vui lòng nhập đầy đủ thông tin.", error=True)
+            return
+        if p != c:
+            self._show_status("Mật khẩu xác nhận không khớp.", error=True)
+            return
+        if u in self.users:
+            self._show_status("Tên đăng nhập đã tồn tại.", error=True)
+            return
+        self.users[u] = {"password": hash_password(p), "created": datetime.now().isoformat()}
+        save_users(self.users)
+        self._show_status(f"Đăng ký thành công! Xin chào {u} 🎉", error=False)
+
+    def _do_forgot(self):
+        u = self.e_user.get().strip()
+        p = self.e_pass.get()
+        if not u or not p:
+            self._show_status("Vui lòng nhập đầy đủ thông tin.", error=True)
+            return
+        if u not in self.users:
+            self._show_status("Tên đăng nhập không tồn tại.", error=True)
+            return
+        self.users[u]["password"] = hash_password(p)
+        save_users(self.users)
+        self._show_status("Mật khẩu đã được cập nhật thành công ✅", error=False)
+
+    def _show_status(self, msg, error=False):
+        self.status_var.set(msg)
+        self.status_lbl.config(fg=C_ERROR if error else C_SUCCESS)
+
+
+# ════════════════════════════════════════════════
+#  ARDUINO MONITOR WINDOW
+# ════════════════════════════════════════════════
+class ArduinoWindow(tk.Frame):
+    def __init__(self, master, username):
+        super().__init__(master, bg=C_BG, width=WIN_W, height=WIN_H)
+        self.master = master
+        self.username = username
+        self.pack_propagate(False)
+        self.pack(fill="both", expand=True)
+
+        self.ser = None
+        self.reading = False
+        self.data_buffer = []
+        self.counters = {"red": 0, "blue": 0, "green": 0}
+
+        self._build_ui()
+
+    def _build_ui(self):
+        # ── TOP BAR ──────────────────────────────
+        topbar = tk.Frame(self, bg=C_RED, height=48)
+        topbar.pack(fill="x")
+        topbar.pack_propagate(False)
+
+        tk.Label(topbar, text="⚙  IT Blind Club — Hệ thống phân loại băng truyền",
+                 bg=C_RED, fg="white",
+                 font=("Georgia", 13, "bold")).pack(side="left", padx=16, pady=10)
+        tk.Label(topbar, text=f"👤 {self.username}",
+                 bg=C_RED, fg="white",
+                 font=("Arial", 10)).pack(side="right", padx=16)
+
+        # Color indicator strip
+        strip = tk.Frame(self, height=4, bg=C_BG)
+        strip.pack(fill="x")
+        for col in [C_RED, C_BLUE, C_GREEN]:
+            tk.Frame(strip, height=4, bg=col, width=WIN_W//3).pack(side="left")
+
+        # ── MAIN CONTENT ─────────────────────────
+        content = tk.Frame(self, bg=C_BG)
+        content.pack(fill="both", expand=True, padx=16, pady=12)
+
+        # LEFT: Arduino connection + serial log
+        left_col = tk.Frame(content, bg=C_BG)
+        left_col.pack(side="left", fill="both", expand=True, padx=(0, 10))
+
+        # Connection card
+        conn_card = self._card(left_col, "🔌  Kết nối Arduino")
+        conn_card.pack(fill="x", pady=(0, 10))
+
+        row1 = tk.Frame(conn_card, bg=C_CARD)
+        row1.pack(fill="x", pady=6)
+
+        tk.Label(row1, text="Cổng COM:", bg=C_CARD, fg=C_SUBTEXT,
+                 font=("Arial", 9)).pack(side="left", padx=(8, 4))
+        self.port_var = tk.StringVar()
+        self.port_combo = ttk.Combobox(row1, textvariable=self.port_var,
+                                       width=14, state="readonly")
+        self._refresh_ports()
+        self.port_combo.pack(side="left", padx=4)
+
+        tk.Label(row1, text="Baud:", bg=C_CARD, fg=C_SUBTEXT,
+                 font=("Arial", 9)).pack(side="left", padx=(8, 4))
+        self.baud_var = tk.StringVar(value="9600")
+        baud_combo = ttk.Combobox(row1, textvariable=self.baud_var,
+                                   values=["9600", "115200", "57600", "38400"],
+                                   width=8, state="readonly")
+        baud_combo.pack(side="left", padx=4)
+
+        row2 = tk.Frame(conn_card, bg=C_CARD)
+        row2.pack(fill="x", pady=(0, 8))
+
+        self.btn_connect = tk.Button(row2, text="▶  Kết nối",
+                                     bg=C_GREEN, fg=C_BG,
+                                     font=("Arial", 9, "bold"),
+                                     relief="flat", cursor="hand2",
+                                     padx=12, pady=4,
+                                     command=self._toggle_connect)
+        self.btn_connect.pack(side="left", padx=8)
+
+        tk.Button(row2, text="↺  Làm mới cổng",
+                  bg=C_BLUE, fg="white",
+                  font=("Arial", 9), relief="flat",
+                  cursor="hand2", padx=10, pady=4,
+                  command=self._refresh_ports).pack(side="left", padx=4)
+
+        self.conn_status = tk.Label(row2, text="● Chưa kết nối",
+                                    bg=C_CARD, fg=C_ERROR,
+                                    font=("Arial", 9, "bold"))
+        self.conn_status.pack(side="right", padx=12)
+
+        # Serial log
+        log_card = self._card(left_col, "📋  Dữ liệu từ Arduino")
+        log_card.pack(fill="both", expand=True)
+
+        log_inner = tk.Frame(log_card, bg=C_CARD)
+        log_inner.pack(fill="both", expand=True, padx=4, pady=4)
+
+        scrollbar = tk.Scrollbar(log_inner)
+        scrollbar.pack(side="right", fill="y")
+
+        self.log_text = tk.Text(log_inner, bg="#0A1520", fg=C_GREEN,
+                                font=("Courier", 9),
+                                relief="flat", wrap="word",
+                                yscrollcommand=scrollbar.set,
+                                state="disabled")
+        self.log_text.pack(fill="both", expand=True)
+        scrollbar.config(command=self.log_text.yview)
+
+        self.log_text.tag_config("red_tag",   foreground=C_RED)
+        self.log_text.tag_config("blue_tag",  foreground=C_BLUE)
+        self.log_text.tag_config("green_tag", foreground=C_GREEN)
+        self.log_text.tag_config("info_tag",  foreground=C_SUBTEXT)
+
+        # Send command row
+        send_row = tk.Frame(left_col, bg=C_BG)
+        send_row.pack(fill="x", pady=(6, 0))
+        tk.Label(send_row, text="Gửi lệnh:", bg=C_BG, fg=C_SUBTEXT,
+                 font=("Arial", 9)).pack(side="left")
+        self.cmd_entry = tk.Entry(send_row, bg=C_ENTRY_BG, fg=C_TEXT,
+                                  insertbackground=C_TEXT,
+                                  relief="flat", font=("Courier", 10))
+        self.cmd_entry.pack(side="left", fill="x", expand=True, ipady=4, padx=6)
+        self.cmd_entry.bind("<Return>", lambda e: self._send_command())
+        tk.Button(send_row, text="Send", bg=C_ACCENT, fg=C_BG,
+                  font=("Arial", 9, "bold"), relief="flat",
+                  cursor="hand2", padx=10, pady=3,
+                  command=self._send_command).pack(side="left")
+
+        # RIGHT: Classification stats + gauge
+        right_col = tk.Frame(content, bg=C_BG, width=240)
+        right_col.pack(side="right", fill="y")
+        right_col.pack_propagate(False)
+
+        stat_card = self._card(right_col, "📊  Thống kê phân loại")
+        stat_card.pack(fill="x", pady=(0, 10))
+
+        self.counter_labels = {}
+        for key, col, name in [("red", C_RED, "🔴 Đỏ"),
+                                ("blue", C_BLUE, "🔵 Xanh dương"),
+                                ("green", C_GREEN, "🟢 Xanh lá")]:
+            row = tk.Frame(stat_card, bg=C_CARD)
+            row.pack(fill="x", padx=6, pady=4)
+            tk.Label(row, text=name, bg=C_CARD, fg=col,
+                     font=("Arial", 10, "bold"), width=14,
+                     anchor="w").pack(side="left")
+            lbl = tk.Label(row, text="0", bg=C_CARD, fg="white",
+                           font=("Arial", 18, "bold"), width=5,
+                           anchor="e")
+            lbl.pack(side="right", padx=8)
+            self.counter_labels[key] = lbl
+
+        # Canvas gauge / visual
+        gauge_card = self._card(right_col, "🎯  Phân bố màu sắc")
+        gauge_card.pack(fill="both", expand=True)
+
+        self.gauge_canvas = tk.Canvas(gauge_card, bg=C_CARD,
+                                      highlightthickness=0,
+                                      width=210, height=200)
+        self.gauge_canvas.pack(padx=6, pady=6)
+        self._draw_gauge()
+
+        # Reset + logout buttons
+        btn_row = tk.Frame(right_col, bg=C_BG)
+        btn_row.pack(fill="x", pady=6)
+        tk.Button(btn_row, text="🔄 Reset",
+                  bg=C_CARD, fg=C_TEXT,
+                  font=("Arial", 9), relief="flat",
+                  cursor="hand2", padx=10, pady=5,
+                  command=self._reset_counters).pack(side="left", padx=(0, 6))
+        tk.Button(btn_row, text="🚪 Đăng xuất",
+                  bg=C_RED, fg="white",
+                  font=("Arial", 9, "bold"), relief="flat",
+                  cursor="hand2", padx=10, pady=5,
+                  command=self._logout).pack(side="right")
+
+    def _card(self, parent, title):
+        frame = tk.Frame(parent, bg=C_CARD, bd=0,
+                         highlightthickness=1,
+                         highlightbackground=C_BORDER)
+        tk.Label(frame, text=title, bg=C_CARD, fg=C_ACCENT,
+                 font=("Arial", 10, "bold"),
+                 anchor="w", padx=8, pady=6).pack(fill="x")
+        tk.Frame(frame, height=1, bg=C_BORDER).pack(fill="x")
+        return frame
+
+    def _refresh_ports(self):
+        if SERIAL_AVAILABLE:
+            ports = [p.device for p in serial.tools.list_ports.comports()]
+        else:
+            ports = ["COM1", "COM2", "COM3", "/dev/ttyUSB0", "/dev/ttyACM0"]
+        self.port_combo["values"] = ports
+        if ports:
+            self.port_var.set(ports[0])
+
+    def _toggle_connect(self):
+        if self.ser and self.ser.is_open:
+            self._disconnect()
+        else:
+            self._connect()
+
+    def _connect(self):
+        if not SERIAL_AVAILABLE:
+            self._append_log("⚠  pyserial chưa được cài. Chạy: pip install pyserial\n", "info_tag")
+            # Demo mode
+            self.conn_status.config(text="● Demo mode (không có pyserial)", fg=C_ACCENT)
+            self.btn_connect.config(text="⏹  Dừng demo", bg=C_RED, fg="white")
+            self.reading = True
+            threading.Thread(target=self._demo_read, daemon=True).start()
+            return
+        port = self.port_var.get()
+        baud = int(self.baud_var.get())
+        try:
+            self.ser = serial.Serial(port, baud, timeout=1)
+            self.reading = True
+            self.conn_status.config(text=f"● Đã kết nối {port}", fg=C_GREEN)
+            self.btn_connect.config(text="⏹  Ngắt kết nối", bg=C_RED, fg="white")
+            self._append_log(f"[{self._ts()}] ✅ Kết nối {port} @ {baud} baud\n", "info_tag")
+            threading.Thread(target=self._read_serial, daemon=True).start()
+        except Exception as ex:
+            self._append_log(f"[{self._ts()}] ❌ Lỗi: {ex}\n", "info_tag")
+            messagebox.showerror("Lỗi kết nối", str(ex))
+
+    def _disconnect(self):
+        self.reading = False
+        if self.ser:
+            self.ser.close()
+            self.ser = None
+        self.conn_status.config(text="● Đã ngắt kết nối", fg=C_ERROR)
+        self.btn_connect.config(text="▶  Kết nối", bg=C_GREEN, fg=C_BG)
+        self._append_log(f"[{self._ts()}] 🔌 Ngắt kết nối\n", "info_tag")
+
+    def _read_serial(self):
+        while self.reading and self.ser and self.ser.is_open:
+            try:
+                line = self.ser.readline().decode("utf-8", errors="ignore").strip()
+                if line:
+                    self.master.after(0, self._process_line, line)
+            except Exception:
+                break
+
+    def _demo_read(self):
+        """Simulate Arduino data for demo purposes."""
+        import random
+        colors = ["RED", "BLUE", "GREEN"]
+        while self.reading:
+            time.sleep(1.2)
+            color = random.choice(colors)
+            sensor = round(random.uniform(0.1, 3.3), 2)
+            line = f"{color}:{sensor}"
+            self.master.after(0, self._process_line, line)
+
+    def _process_line(self, line):
+        upper = line.upper()
+        tag = "info_tag"
+        if "RED" in upper:
+            self.counters["red"] += 1
+            tag = "red_tag"
+        elif "BLUE" in upper:
+            self.counters["blue"] += 1
+            tag = "blue_tag"
+        elif "GREEN" in upper:
+            self.counters["green"] += 1
+            tag = "green_tag"
+
+        self._append_log(f"[{self._ts()}]  {line}\n", tag)
+        self._update_counters()
+        self._draw_gauge()
+
+    def _append_log(self, msg, tag="info_tag"):
+        self.log_text.config(state="normal")
+        self.log_text.insert("end", msg, tag)
+        self.log_text.see("end")
+        self.log_text.config(state="disabled")
+
+    def _send_command(self):
+        cmd = self.cmd_entry.get().strip()
+        if not cmd:
+            return
+        if self.ser and self.ser.is_open:
+            self.ser.write((cmd + "\n").encode())
+            self._append_log(f"[{self._ts()}] >> {cmd}\n", "info_tag")
+        else:
+            self._append_log(f"[{self._ts()}] ⚠  Chưa kết nối Arduino\n", "info_tag")
+        self.cmd_entry.delete(0, "end")
+
+    def _update_counters(self):
+        for key, lbl in self.counter_labels.items():
+            lbl.config(text=str(self.counters[key]))
+
+    def _reset_counters(self):
+        self.counters = {"red": 0, "blue": 0, "green": 0}
+        self._update_counters()
+        self._draw_gauge()
+
+    def _draw_gauge(self):
+        c = self.gauge_canvas
+        c.delete("all")
+        cx, cy, r = 105, 105, 80
+        total = sum(self.counters.values()) or 1
+        colors_map = [("red", C_RED), ("blue", C_BLUE), ("green", C_GREEN)]
+
+        start = -90
+        for key, col in colors_map:
+            extent = (self.counters[key] / total) * 360
+            if extent > 0:
+                c.create_arc(cx-r, cy-r, cx+r, cy+r,
+                             start=start, extent=extent,
+                             fill=col, outline=C_CARD, width=2)
+                start += extent
+
+        # Center hole
+        c.create_oval(cx-38, cy-38, cx+38, cy+38,
+                      fill=C_CARD, outline=C_CARD)
+        c.create_text(cx, cy-8, text=str(sum(self.counters.values())),
+                      fill="white", font=("Arial", 16, "bold"))
+        c.create_text(cx, cy+12, text="tổng", fill=C_SUBTEXT,
+                      font=("Arial", 8))
+
+        # Legend
+        for i, (key, col) in enumerate(colors_map):
+            lx, ly = 10, 175 - i * 18
+            c.create_rectangle(lx, ly, lx+12, ly+12, fill=col, outline="")
+            pct = round(self.counters[key] / total * 100) if total > 1 else 0
+            c.create_text(lx+18, ly+6, anchor="w",
+                          text=f"{key.capitalize()}: {pct}%",
+                          fill=C_TEXT, font=("Arial", 8))
+
+    def _logout(self):
+        if self.reading:
+            self._disconnect()
+        self.master.show_login()
+
+    def _ts(self):
+        return datetime.now().strftime("%H:%M:%S")
+
+
+# ════════════════════════════════════════════════
+#  MAIN APPLICATION
+# ════════════════════════════════════════════════
+class App(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("IT Blind Club — Conveyor Classification System")
+        self.geometry(f"{WIN_W}x{WIN_H}")
+        self.resizable(False, False)
+        self.configure(bg=C_BG)
+
+        # Style for combobox
+        style = ttk.Style(self)
+        style.theme_use("clam")
+        style.configure("TCombobox",
+                        fieldbackground=C_ENTRY_BG,
+                        background=C_ENTRY_BG,
+                        foreground=C_TEXT,
+                        selectbackground=C_BLUE,
+                        selectforeground="white",
+                        bordercolor=C_BORDER,
+                        arrowcolor=C_TEXT)
+
+        self.current_frame = None
+        self.show_login()
+
+    def show_login(self):
+        if self.current_frame:
+            self.current_frame.destroy()
+        self.current_frame = LoginWindow(self, on_login_success=self.show_arduino)
+
+    def show_arduino(self, username):
+        if self.current_frame:
+            self.current_frame.destroy()
+        self.current_frame = ArduinoWindow(self, username)
+
+
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()
